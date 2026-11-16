@@ -1,0 +1,13 @@
+[package]
+name = "eaglerx-pumkin"
+version = "0.1.0"
+edition = "2024"
+description = "Eaglercraft support for stock Pumpkin servers, as a WASM plugin. Phase 0 spike."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pumpkin-plugin-api = "0.2.1+26.3-26.51"
+eagler-ws = { path = "../eagler-ws" }
+tracing.workspace = true

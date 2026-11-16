@@ -1,0 +1,8 @@
+[package]
+name = "eagler-ws"
+version = "0.1.0"
+edition = "2024"
+description = "Minimal server-side WebSocket (RFC 6455) framing for the EaglerXPumkin plugin; std-only, wasm-ready."
+
+[dependencies]
+# intentionally empty: no external deps so this compiles cleanly on wasm targets

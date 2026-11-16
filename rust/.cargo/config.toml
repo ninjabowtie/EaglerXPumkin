@@ -1,0 +1,10 @@
+[build]
+# Pumpkin targets WASI preview 3 (see docs.pumpkinmc.org/plugin-dev/rust/creating-project).
+# If the toolchain lacks wasm32-wasip3, build.sh falls back to wasm32-wasip2.
+target = "wasm32-wasip3"
+
+[target.wasm32-wasip3]
+rustflags = ["-Ctarget-feature=+atomics,+bulk-memory"]
+
+[target.wasm32-wasip2]
+rustflags = ["-Ctarget-feature=+atomics,+bulk-memory"]

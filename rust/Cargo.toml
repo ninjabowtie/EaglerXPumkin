@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/eagler-ws",
+    "crates/eaglerx-pumkin",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+tracing = "0.1"
+
+[profile.release]
+lto = true
+opt-level = "s"

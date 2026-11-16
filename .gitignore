@@ -4,3 +4,7 @@
 .project
 build
 bin
+/rust/target/
+/rust/dist/
+/rust/eagler.toml
+/rust/tests/__pycache__/

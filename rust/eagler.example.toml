@@ -1,0 +1,8 @@
+listen_port = 8081
+backend_port = 25565
+listen_address = "0.0.0.0"
+backend_address = "127.0.0.1"
+server_address = "localhost"
+minecraft_protocol = 777
+max_connections = 64
+motd = "EaglerXPumkin\nMinecraft 26.3"

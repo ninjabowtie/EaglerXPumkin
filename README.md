@@ -1,3 +1,23 @@
+# EaglerXPumkin — Pumpkin 26.3 port
+
+The Rust WASM gateway is runnable on stock Pumpkin 26.3. It supports Gaius's
+`/tunnel` transport alongside the Eagler handshake transport. Gaius 26.3 browser
+play has been tested: movement, chat, breaking and placing blocks work.
+
+```sh
+rustup target add wasm32-wasip2
+./rust/build.sh
+```
+
+Install `rust/dist/EaglerXPumkin.wasm` in Pumpkin's `plugins/` folder.
+See [Rust setup and tested compatibility](rust/README.md) for offline-mode
+configuration, permissions, connection addresses and remaining port work.
+Older Minecraft versions and full Java feature parity are still in progress.
+
+---
+
+The original Java project's documentation follows.
+
 # EaglerXPaper
 
 [![Paper](https://img.shields.io/badge/Paper-1.8+-blue)](https://papermc.io)

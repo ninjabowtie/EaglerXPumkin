@@ -1,6 +1,27 @@
 # EaglerXPumkin → Pumpkin (Rust) Port Plan
 
-**Goal:** Re-implement this plugin so Eaglercraft clients can join **stock Pumpkin servers** (https://pumpkinmc.org/), with full feature parity with the Java plugin as it works today on Paper.
+> Implementation update (2026-11-16): the first working 26.3 gateway is in
+> `rust/`; see `rust/README.md` for verified setup and scope. Stock Pumpkin
+> 0.2.2+26.3-26.60 loaded the WASI P2 plugin successfully. Gaius 26.3 browser
+> play was confirmed by the user (movement, chat, breaking/placing blocks).
+> Important corrections to the original design below:
+> - The pinned `pumpkin-plugin-api` crate exports ABI v0.1, not async v0.2.
+>   It requires `wasm32-wasip2`; the implementation uses scheduler polling,
+>   without guest threads.
+> - `network.loopback` restricts all socket operations to loopback, including
+>   binds. It is not requested for the public listener. Backend destinations
+>   are restricted to loopback by the plugin config validator instead.
+> - Eagler messages carry packet bodies; backend TCP lengths and compression
+>   must be handled by the bridge. They cannot simply be copied unchanged.
+>   Gaius uses a separate `/tunnel` protocol carrying the full TCP stream.
+> - Stock Pumpkin currently accepts protocol 777. Older enum variants do not
+>   establish support for older clients; those need a translation plugin.
+> Feature parity excluding Eaglercraft voice remains the longer-term plan; this
+> first release targets 26.3. Voice chat will be handled by a separate plugin,
+> per the project owner’s direction (2026-11-16).
+
+
+**Goal:** Re-implement this plugin so Eaglercraft clients can join **stock Pumpkin servers** (https://pumpkinmc.org/), with feature parity with the Java plugin as it works today on Paper, except for Eaglercraft voice chat, which is out of scope and will be handled by a separate plugin.
 
 - **Target runtime:** unmodified Pumpkin server builds (which load **WASM plugins only** — verified in `crates/pumpkin/src/main.rs`, only `WasmPluginLoader` is registered).
 - **Deliverable:** a Rust WASM plugin (`EaglerXPumkin.wasm`) plus a Rust workspace for the protocol implementation, packaged like any Pumpkin plugin and installable by dropping it in `plugins/` and accepting its permission prompts.
@@ -41,7 +62,6 @@ Eaglercraft browser client
 │  │    streams; binary frames)                      │ │
 │  │  • Eagler handshake v2–v5, auth, profile        │ │
 │  │  • skins (cache + Mojang fetch via http)        │ │
-│  │  • voice channels (IVMP — plugin-side only)     │ │
 │  │  • MOTD / server-list ping                      │ │
 │  │  • adaptive packet batching                     │ │
 │  └──────────────────┬──────────────────────────────┘ │
@@ -61,11 +81,11 @@ Eaglercraft browser client
    - `SLoginStart`-adjacent bytes if needed to synchronize Eagler profile data.
    Everything else is opaque bytes in → bytes out.
 3. **Handshake ownership.** The plugin performs the vanilla handshake + login-start *on behalf of* the Eagler client when the client's stream begins (exactly like EaglerXServer does at the Bungee/Velocity layer), then switches to pure relay.
-4. **Everything Eagler-specific lives in the Eagler layer.** Skins, voice, MOTD, pause menu, notifications are Eagler-protocol constructs between the plugin and the browser client; Pumpkin never sees them.
+4. **Everything Eagler-specific lives in the Eagler layer.** Skins, MOTD, pause menu, notifications are Eagler-protocol constructs between the plugin and the browser client; Pumpkin never sees them.
 
 ---
 
-## 3. Scope: full parity with the Java plugin
+## 3. Scope: Java feature parity excluding Eaglercraft voice
 
 Every feature the Java plugin provides on Paper is in scope, mapped to its new home:
 
@@ -96,7 +116,7 @@ Every feature the Java plugin provides on Paper is in scope, mapped to its new h
 ### Phase 2 — Full Eagler protocol layer (4–8 weeks)
 
 - [ ] **Skins:** full skin pipeline — profile skin packets, custom-skin uploads, SQLite skin cache → ported as a binary file store in the data folder (SQLite itself can't run in WASM; `redb`-style or custom append-only store), **pre-warming**: at plugin start, fetch recently-seen players' skins from Mojang sessionserver via `http.outbound`.
-- [ ] **Voice:** Eagler IVMP voice channels — plugin-side only (channels, ICE-style relay between Eagler clients, voice chat toggle packets). No Pumpkin involvement, same as upstream.
+- **Out of scope — Eaglercraft voice:** do not port IVMP channels or voice signaling. Voice chat will use a separate plugin chosen by the project owner.
 - [ ] **Password auth:** Eagler authentication handler (offline-mode account login/register/change-password flow) with hash storage in the data folder.
 - [ ] **Adaptive packet batching:** port the 3-mode batcher (idle passthrough / ~2 ms burst buffering / 200 ms forced-flush timer) — critical here because every packet crosses the WASM boundary twice.
 - [ ] **Pause menu / notifications / message channels:** Eagler protocol features (custom icons, update notifications, websocket keepalive, C17-style messages).
@@ -128,7 +148,6 @@ EaglerXPumkin/
     ├── crates/
     │   ├── eagler-protocol/      # Eagler wire protocol: packets, serde, versions v2–v5
     │   ├── eagler-skins/         # skin store, Mojang fetch, cache
-    │   ├── eagler-voice/         # IVMP voice channels
     │   ├── eagler-ws/            # WebSocket framing over WASI streams
     │   ├── eagler-config/        # TOML config
     │   └── eaglerx-pumkin/       # the plugin itself: listener, relay, lifecycle
@@ -156,7 +175,7 @@ EaglerXPumkin/
 
 ## 6. Testing strategy
 
-1. **Protocol conformance:** replay captures from the Java plugin's traffic (Eagler handshake, skin packets, voice signaling) as golden tests for `eagler-protocol`.
+1. **Protocol conformance:** replay captures from the Java plugin's traffic (Eagler handshake and skin packets) as golden tests for `eagler-protocol`.
 2. **End-to-end:** scripted Eaglercraft browser client (puppeteer against a local Eaglercraft build) joining a Pumpkin server via the plugin; assert join, movement sync, chat, skin display.
 3. **Vanilla regression:** normal Java client joins on 25565 while the Eagler listener is active — zero interference.
 4. **Soak:** 50 fake Eagler clients (protocol fuzzer from Phase 1 captures) for memory/leak checks; packet limiter behavior.
@@ -179,7 +198,7 @@ Both fallbacks reuse ≥95% of the ported code; the Phase 0 spike chooses the la
 |-------|-----------------|
 | 0 Spike | 1–2 weeks |
 | 1 Core connect-and-play | 4–8 weeks |
-| 2 Full Eagler layer (skins, voice, auth, batching) | 4–8 weeks |
+| 2 Eagler layer (skins, auth, batching) | 4–8 weeks |
 | 3 Addons (eaglerweb, rewind, supervisor) | open-ended |
 
 Total relevant Java being ported: ~25k lines (from this repo) → estimated ~12–18k lines of Rust.

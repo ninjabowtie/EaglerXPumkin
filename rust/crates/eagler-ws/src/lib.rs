@@ -14,7 +14,13 @@ use std::io::{Read, Write};
 // ---------------------------------------------------------------------------
 
 pub fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+    let mut h: [u32; 5] = [
+        0x6745_2301,
+        0xEFCD_AB89,
+        0x98BA_DCFE,
+        0x1032_5476,
+        0xC3D2_E1F0,
+    ];
 
     // Padded message: msg + 0x80 + zeros + 64-bit big-endian bit length.
     let bit_len = (data.len() as u64) * 8;
@@ -26,9 +32,14 @@ pub fn sha1(data: &[u8]) -> [u8; 20] {
     msg.extend_from_slice(&bit_len.to_be_bytes());
 
     let mut w = [0u32; 80];
-    for chunk in msg.chunks_exact(64) {
+    for chunk in msg.as_chunks::<64>().0 {
         for i in 0..16 {
-            w[i] = u32::from_be_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]]);
+            w[i] = u32::from_be_bytes([
+                chunk[i * 4],
+                chunk[i * 4 + 1],
+                chunk[i * 4 + 2],
+                chunk[i * 4 + 3],
+            ]);
         }
         for i in 16..80 {
             w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
@@ -41,7 +52,12 @@ pub fn sha1(data: &[u8]) -> [u8; 20] {
                 40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC),
                 _ => (b ^ c ^ d, 0xCA62_C1D6),
             };
-            let temp = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(wi);
+            let temp = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(wi);
             e = d;
             d = c;
             c = b.rotate_left(30);
@@ -71,12 +87,24 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 pub fn base64_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = u32::from_be_bytes([0, b[0], b[1], b[2]]);
         out.push(B64[(n >> 18) as usize & 63] as char);
         out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -122,57 +150,66 @@ pub fn handshake(inner: &mut (impl Read + Write)) -> Result<(), HandshakeError> 
         }
     }
 
-    let request = String::from_utf8_lossy(&buf).into_owned();
-    let mut method_upgrade = false;
-    let mut key: Option<&str> = None;
-    for line in request.lines() {
-        if line.starts_with("GET ") {
-            method_upgrade = true;
-        }
-        let lower = line.to_ascii_lowercase();
-        if let Some(v) = lower.strip_prefix("sec-websocket-key:") {
-            key = request.lines().nth(0).and_then(|_| None).or(Some(
-                // keep original casing: find the raw line
-                line.split_once(':').map(|(_, v)| v.trim()).unwrap_or(""),
-            ));
-            let _ = v;
-        }
-        let _ = lower;
-    }
-    if !method_upgrade {
-        return Err(HandshakeError::PlainHttp);
-    }
-    // Simpler robust parse: case-insensitive scan of the raw request.
-    let mut raw_key: Option<String> = None;
-    for line in request.lines() {
-        if let Some((name, value)) = line.split_once(':') {
-            if name.trim().eq_ignore_ascii_case("sec-websocket-key") {
-                raw_key = Some(value.trim().to_string());
-            }
-        }
-    }
-    let key = match raw_key.as_deref() {
-        Some(k) if !k.is_empty() => k,
-        _ => return Err(HandshakeError::NotWebSocket),
-    };
-    let _ = key.as_bytes();
-
-    // Sec-WebSocket-Accept = base64(sha1(key + GUID))
-    let mut accept_input = key.to_string();
-    accept_input.push_str(WS_GUID);
-    let accept = base64_encode(&sha1(accept_input.as_bytes()));
-
-    let response = format!(
-        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
-    );
-    inner.write_all(response.as_bytes())?;
+    inner.write_all(&upgrade_response(&buf)?)?;
     inner.flush()?;
     Ok(())
+}
+
+/// Validate a complete HTTP request and build the upgrade response. The caller
+/// owns incremental reads and must preserve bytes following the header terminator.
+pub fn upgrade_response(request: &[u8]) -> Result<Vec<u8>, HandshakeError> {
+    if request.len() > 8192 || !request.ends_with(b"\r\n\r\n") {
+        return Err(HandshakeError::NotWebSocket);
+    }
+    let request = std::str::from_utf8(request).map_err(|_| HandshakeError::NotWebSocket)?;
+    let mut lines = request.split("\r\n");
+    let words: Vec<_> = lines.next().unwrap_or("").split_whitespace().collect();
+    if words.len() != 3 || words[0] != "GET" || words[2] != "HTTP/1.1" {
+        return Err(HandshakeError::PlainHttp);
+    }
+    let mut key = None;
+    let (mut upgrade, mut connection, mut version, mut host) = (false, false, false, false);
+    for line in lines.filter(|line| !line.is_empty()) {
+        let (name, value) = line.split_once(':').ok_or(HandshakeError::NotWebSocket)?;
+        let value = value.trim();
+        if name.eq_ignore_ascii_case("sec-websocket-key") {
+            if key.replace(value).is_some() {
+                return Err(HandshakeError::NotWebSocket);
+            }
+        } else if name.eq_ignore_ascii_case("upgrade") {
+            upgrade |= value.eq_ignore_ascii_case("websocket");
+        } else if name.eq_ignore_ascii_case("connection") {
+            connection |= value
+                .split(',')
+                .any(|v| v.trim().eq_ignore_ascii_case("upgrade"));
+        } else if name.eq_ignore_ascii_case("sec-websocket-version") {
+            version = value == "13";
+        } else if name.eq_ignore_ascii_case("host") {
+            host = !value.is_empty();
+        }
+    }
+    let key = key.ok_or(HandshakeError::NotWebSocket)?;
+    // A canonical base64 encoding of a 16-byte nonce has 22 digits plus ==.
+    if !upgrade
+        || !connection
+        || !version
+        || !host
+        || key.len() != 24
+        || !key.ends_with("==")
+        || !key.as_bytes()[..22].iter().all(|b| B64.contains(b))
+        || !b"AQgw".contains(&key.as_bytes()[21])
+    {
+        return Err(HandshakeError::NotWebSocket);
+    }
+    let accept = base64_encode(&sha1(format!("{key}{WS_GUID}").as_bytes()));
+    Ok(format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").into_bytes())
 }
 
 // ---------------------------------------------------------------------------
 // Frames
 // ---------------------------------------------------------------------------
+
+const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 
 pub const OP_CONT: u8 = 0x0;
 pub const OP_TEXT: u8 = 0x1;
@@ -202,111 +239,142 @@ pub struct Message {
     pub payload: Vec<u8>,
 }
 
-/// Buffered WS framing over a byte stream. The underlying stream is expected
-/// to already have completed the HTTP upgrade (see [`handshake`]).
+/// Incremental server-side decoder. Partial frames and fragments survive between
+/// scheduler calls; control frames are surfaced even inside fragmented messages.
+#[derive(Default)]
+pub struct Decoder {
+    buf: Vec<u8>,
+    fragmented: Option<Message>,
+}
+
+impl Decoder {
+    pub fn push(&mut self, bytes: &[u8]) -> Result<(), WsError> {
+        if self.buf.len() + bytes.len() > MAX_MESSAGE_SIZE + 14 {
+            return Err(WsError::Protocol("receive buffer too large"));
+        }
+        self.buf.extend_from_slice(bytes);
+        Ok(())
+    }
+
+    pub fn next_message(&mut self) -> Result<Option<Message>, WsError> {
+        loop {
+            let Some((opcode, fin, payload, consumed)) = try_parse_frame(&self.buf)? else {
+                return Ok(None);
+            };
+            self.buf.drain(..consumed);
+            if opcode >= OP_CLOSE {
+                if opcode == OP_CLOSE && payload.len() >= 2 {
+                    let code = u16::from_be_bytes([payload[0], payload[1]]);
+                    if !(matches!(code, 1000..=1003 | 1007..=1014 | 3000..=4999))
+                        || std::str::from_utf8(&payload[2..]).is_err()
+                    {
+                        return Err(WsError::Protocol("invalid close status or reason"));
+                    }
+                }
+                return Ok(Some(Message { opcode, payload }));
+            }
+            let message = if opcode == OP_CONT {
+                let message = self
+                    .fragmented
+                    .as_mut()
+                    .ok_or(WsError::Protocol("unexpected continuation"))?;
+                if message.payload.len() + payload.len() > MAX_MESSAGE_SIZE {
+                    return Err(WsError::Protocol("message too large"));
+                }
+                message.payload.extend_from_slice(&payload);
+                if !fin {
+                    continue;
+                }
+                self.fragmented.take().unwrap()
+            } else {
+                if self.fragmented.is_some() {
+                    return Err(WsError::Protocol("unexpected data frame mid-message"));
+                }
+                let message = Message { opcode, payload };
+                if !fin {
+                    self.fragmented = Some(message);
+                    continue;
+                }
+                message
+            };
+            if message.opcode == OP_TEXT && std::str::from_utf8(&message.payload).is_err() {
+                return Err(WsError::Protocol("invalid text UTF-8"));
+            }
+            return Ok(Some(message));
+        }
+    }
+}
+
+/// Encode one complete, unmasked server frame.
+pub fn encode_message(opcode: u8, payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::with_capacity(payload.len() + 10);
+    frame.push(0x80 | opcode);
+    if payload.len() < 126 {
+        frame.push(payload.len() as u8);
+    } else if payload.len() <= u16::MAX as usize {
+        frame.push(126);
+        frame.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+    } else {
+        frame.push(127);
+        frame.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    }
+    frame.extend_from_slice(payload);
+    frame
+}
+
+/// Blocking convenience wrapper. Nonblocking runtimes should use [`Decoder`]
+/// and retain their output queue across partial writes.
 pub struct WsStream<T: Read + Write> {
     inner: T,
-    buf: Vec<u8>, // leftover bytes from reads, for reassembly
+    decoder: Decoder,
 }
 
 impl<T: Read + Write> WsStream<T> {
     pub fn new(inner: T) -> Self {
-        Self { inner, buf: Vec::new() }
+        Self {
+            inner,
+            decoder: Decoder::default(),
+        }
     }
-
     pub fn get_ref(&self) -> &T {
         &self.inner
     }
-
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.inner
     }
-
-    /// Reads exactly one full frame (including continuation), transparently
-    /// answering ping and replying to close per RFC 6455. Returns `Err(WsError::Closed)`
-    /// when the peer closes cleanly.
     pub fn read_message(&mut self) -> Result<Message, WsError> {
         loop {
-            // Parse as much as we can from buf.
-            if let Some((opcode, fin, payload, consumed)) = try_parse_frame(&self.buf)? {
-                self.buf.drain(..consumed);
-
-                match opcode {
-                    OP_PING => {
-                        self.write_message(OP_PONG, &payload)?;
-                        continue;
-                    }
+            if let Some(message) = self.decoder.next_message()? {
+                match message.opcode {
+                    OP_PING => self.write_message(OP_PONG, &message.payload)?,
+                    OP_PONG => {}
                     OP_CLOSE => {
-                        // Echo close then signal closed.
-                        let _ = self.write_message(OP_CLOSE, &payload);
+                        let _ = self.write_message(OP_CLOSE, &message.payload);
                         return Err(WsError::Closed);
                     }
-                    OP_PONG => continue, // ignore unsolicited pongs
-                    op if fin => return Ok(Message { opcode: op, payload }),
-                    _ => {
-                        // Start of a fragmented message: keep reading continuation.
-                        let mut acc = payload;
-                        let first_opcode = op;
-                        loop {
-                            let (cop, cfin, cpl, c) = try_parse_frame(&fill(&mut self.buf, &mut self.inner)?)?
-                                .ok_or(WsError::Protocol("incomplete frame"))?;
-                            self.buf.drain(..c);
-                            match cop {
-                                OP_CONT => {
-                                    acc.extend_from_slice(&cpl);
-                                    if cfin {
-                                        return Ok(Message { opcode: first_opcode, payload: acc });
-                                    }
-                                }
-                                OP_PING => self.write_message(OP_PONG, &cpl)?,
-                                OP_CLOSE => return Err(WsError::Closed),
-                                OP_PONG => {}
-                                _ => return Err(WsError::Protocol("unexpected data frame mid-message")),
-                            }
-                        }
-                    }
+                    _ => return Ok(message),
                 }
+                continue;
             }
-            // Need more bytes.
-            self.buf = fill(&mut self.buf, &mut self.inner)?;
+            let mut bytes = [0; 4096];
+            let n = match self.inner.read(&mut bytes) {
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                result => result?,
+            };
+            if n == 0 {
+                return Err(WsError::Closed);
+            }
+            self.decoder.push(&bytes[..n])?;
         }
     }
-
-    /// Writes a complete frame with the given opcode. Server frames are unmasked.
     pub fn write_message(&mut self, opcode: u8, payload: &[u8]) -> Result<(), WsError> {
-        let mut frame = Vec::with_capacity(payload.len() + 10);
-        frame.push(0x80 | opcode); // FIN + opcode
-        let len = payload.len();
-        if len < 126 {
-            frame.push(len as u8);
-        } else if len <= u16::MAX as usize {
-            frame.push(126);
-            frame.extend_from_slice(&(len as u16).to_be_bytes());
-        } else {
-            frame.push(127);
-            frame.extend_from_slice(&(len as u64).to_be_bytes());
-        }
-        frame.extend_from_slice(payload);
-        self.inner.write_all(&frame)?;
+        self.inner.write_all(&encode_message(opcode, payload))?;
         self.inner.flush()?;
         Ok(())
     }
-
-    /// Sends a close frame (best effort).
     pub fn close(&mut self) {
         let _ = self.write_message(OP_CLOSE, &[]);
     }
-}
-
-/// Ensures `buf` has at least a few more bytes, returning the extended buffer.
-fn fill(buf: &mut Vec<u8>, inner: &mut impl Read) -> Result<Vec<u8>, WsError> {
-    let mut tmp = [0u8; 4096];
-    let n = inner.read(&mut tmp)?;
-    if n == 0 {
-        return Err(WsError::Closed);
-    }
-    buf.extend_from_slice(&tmp[..n]);
-    Ok(std::mem::take(buf))
 }
 
 /// Attempts to parse one frame from `buf`. Returns
@@ -321,6 +389,18 @@ fn try_parse_frame(buf: &[u8]) -> Result<Option<(u8, bool, Vec<u8>, usize)>, WsE
     let opcode = b0 & 0x0F;
     let fin = (b0 & 0x80) != 0;
     let masked = (b1 & 0x80) != 0;
+    if b0 & 0x70 != 0 {
+        return Err(WsError::Protocol("reserved bits set"));
+    }
+    if !matches!(
+        opcode,
+        OP_CONT | OP_TEXT | OP_BIN | OP_CLOSE | OP_PING | OP_PONG
+    ) {
+        return Err(WsError::Protocol("unknown opcode"));
+    }
+    if !masked {
+        return Err(WsError::Protocol("client frame must be masked"));
+    }
     let len7 = (b1 & 0x7F) as usize;
 
     let mut header = 2usize;
@@ -330,7 +410,11 @@ fn try_parse_frame(buf: &[u8]) -> Result<Option<(u8, bool, Vec<u8>, usize)>, WsE
                 return Ok(None);
             }
             header = 4;
-            u16::from_be_bytes([buf[2], buf[3]]) as usize
+            let len = u16::from_be_bytes([buf[2], buf[3]]) as usize;
+            if len < 126 {
+                return Err(WsError::Protocol("non-minimal payload length"));
+            }
+            len
         }
         127 => {
             if buf.len() < 10 {
@@ -339,12 +423,22 @@ fn try_parse_frame(buf: &[u8]) -> Result<Option<(u8, bool, Vec<u8>, usize)>, WsE
             header = 10;
             let mut b = [0u8; 8];
             b.copy_from_slice(&buf[2..10]);
-            u64::from_be_bytes(b) as usize
+            let len = u64::from_be_bytes(b);
+            if len < 65536 || len & (1 << 63) != 0 {
+                return Err(WsError::Protocol("invalid payload length"));
+            }
+            usize::try_from(len).map_err(|_| WsError::Protocol("frame too large"))?
         }
         n => n,
     };
 
-    if payload_len > 16 * 1024 * 1024 {
+    if opcode >= OP_CLOSE && (!fin || payload_len > 125) {
+        return Err(WsError::Protocol("invalid control frame"));
+    }
+    if opcode == OP_CLOSE && payload_len == 1 {
+        return Err(WsError::Protocol("invalid close payload"));
+    }
+    if payload_len > MAX_MESSAGE_SIZE {
         return Err(WsError::Protocol("frame too large"));
     }
 
@@ -353,7 +447,12 @@ fn try_parse_frame(buf: &[u8]) -> Result<Option<(u8, bool, Vec<u8>, usize)>, WsE
         return Ok(None);
     }
     let mask = if masked {
-        Some([buf[header], buf[header + 1], buf[header + 2], buf[header + 3]])
+        Some([
+            buf[header],
+            buf[header + 1],
+            buf[header + 2],
+            buf[header + 3],
+        ])
     } else {
         None
     };
@@ -374,10 +473,154 @@ fn try_parse_frame(buf: &[u8]) -> Result<Option<(u8, bool, Vec<u8>, usize)>, WsE
 mod tests {
     use super::*;
 
+    struct Duplex {
+        input: std::io::Cursor<Vec<u8>>,
+        output: Vec<u8>,
+        chunk_size: usize,
+    }
+
+    impl Read for Duplex {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let len = buf.len().min(self.chunk_size);
+            self.input.read(&mut buf[..len])
+        }
+    }
+
+    impl Write for Duplex {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.output.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn client_frame(opcode: u8, fin: bool, payload: &[u8]) -> Vec<u8> {
+        assert!(payload.len() < 126);
+        let mask = [1, 2, 3, 4];
+        let mut frame = vec![
+            opcode | if fin { 0x80 } else { 0 },
+            0x80 | payload.len() as u8,
+        ];
+        frame.extend_from_slice(&mask);
+        frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+        frame
+    }
+
+    #[test]
+    fn fragmented_messages_survive_partial_reads_and_interleaved_ping() {
+        let mut input = client_frame(OP_BIN, false, b"hello ");
+        input.extend(client_frame(OP_PING, true, b"ping"));
+        input.extend(client_frame(OP_CONT, true, b"world"));
+        input.extend(client_frame(OP_BIN, true, b"next"));
+        for chunk_size in [1, 3, 4096] {
+            let mut ws = WsStream::new(Duplex {
+                input: std::io::Cursor::new(input.clone()),
+                output: Vec::new(),
+                chunk_size,
+            });
+            let message = ws.read_message().unwrap();
+            assert_eq!(message.opcode, OP_BIN);
+            assert_eq!(message.payload, b"hello world");
+            assert_eq!(ws.get_ref().output, b"\x8a\x04ping");
+            assert_eq!(ws.read_message().unwrap().payload, b"next");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_client_frames() {
+        for frame in [
+            vec![0x82, 0],                               // unmasked
+            vec![0xc2, 0x80],                            // reserved bits
+            vec![0x83, 0x80],                            // reserved opcode
+            vec![0x09, 0x80],                            // fragmented ping
+            vec![0x89, 0xfe, 0, 126],                    // oversized ping
+            vec![0x82, 0xfe, 0, 1],                      // non-minimal length
+            vec![0x88, 0x81],                            // one-byte close status
+            vec![0x82, 0xff, 0x80, 0, 0, 0, 0, 0, 0, 0], // invalid 64-bit length
+        ] {
+            assert!(matches!(try_parse_frame(&frame), Err(WsError::Protocol(_))));
+        }
+        let mut ws = WsStream::new(Duplex {
+            input: std::io::Cursor::new(client_frame(OP_CONT, true, b"orphan")),
+            output: Vec::new(),
+            chunk_size: 4096,
+        });
+        assert!(matches!(ws.read_message(), Err(WsError::Protocol(_))));
+    }
+
+    #[test]
+    fn incremental_decoder_retains_fragments_between_polls() {
+        let mut decoder = Decoder::default();
+        decoder
+            .push(&client_frame(OP_BIN, false, b"first"))
+            .unwrap();
+        assert!(decoder.next_message().unwrap().is_none());
+        for byte in client_frame(OP_CONT, true, b"second") {
+            decoder.push(&[byte]).unwrap();
+        }
+        assert_eq!(
+            decoder.next_message().unwrap().unwrap().payload,
+            b"firstsecond"
+        );
+    }
+
+    #[test]
+    fn upgrade_matches_rfc_example_and_rejects_missing_headers() {
+        let request = b"GET /tunnel HTTP/1.1\r\nHost: localhost\r\nUpgrade: WebSocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+        let response = upgrade_response(request).unwrap();
+        assert!(
+            String::from_utf8(response)
+                .unwrap()
+                .contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+        );
+        let text = std::str::from_utf8(request).unwrap();
+        for line in [
+            "Upgrade: WebSocket\r\n",
+            "Connection: keep-alive, Upgrade\r\n",
+            "Sec-WebSocket-Version: 13\r\n",
+            "Host: localhost\r\n",
+        ] {
+            assert!(upgrade_response(text.replace(line, "").as_bytes()).is_err());
+        }
+        assert!(
+            upgrade_response(
+                text.replace("Sec-WebSocket-Version: 13", "Sec-WebSocket-Version: 12")
+                    .as_bytes()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn extended_lengths_and_large_binary_messages() {
+        for len in [126, 65535, 65536, 200000] {
+            let payload: Vec<_> = (0..len).map(|i| (i % 251) as u8).collect();
+            let encoded = encode_message(OP_BIN, &payload);
+            assert_eq!(encoded[1], if len <= 65535 { 126 } else { 127 });
+            let header_len = if len <= 65535 { 4 } else { 10 };
+            let mut wire = encoded[..header_len].to_vec();
+            wire[1] |= 128;
+            wire.extend_from_slice(&[1, 2, 3, 4]);
+            wire.extend(
+                payload
+                    .iter()
+                    .enumerate()
+                    .map(|(i, b)| b ^ [1, 2, 3, 4][i % 4]),
+            );
+            let mut decoder = Decoder::default();
+            for chunk in wire.chunks(97) {
+                decoder.push(chunk).unwrap();
+            }
+            assert_eq!(decoder.next_message().unwrap().unwrap().payload, payload);
+        }
+    }
+
     #[test]
     fn sha1_rfc_vectors() {
         let h = sha1(b"abc");
-        assert_eq!(base64_encode(&h), "qU+Pq5CIqFu7Etheri6tLb8Q7KcQ=");
+        assert_eq!(base64_encode(&h), "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=");
         // Vector: "abc" -> a9993e364706816aba3e25717850c26c9cd0d89d
         assert_eq!(
             h.iter().map(|b| format!("{b:02x}")).collect::<String>(),

@@ -2,3 +2,4 @@
 /rust/dist/
 /rust/eagler.toml
 /rust/tests/__pycache__/
+/rust/scripts/__pycache__/

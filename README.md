@@ -38,3 +38,26 @@ The Eagler handshake implementation is ported from
 Original copyright and license notices are retained in [LICENSE](LICENSE) and
 ported source files. The legacy Java/Paper implementation remains available in
 this repository's Git history; it is no longer part of the active build.
+
+## Manual releases
+
+On GitHub, open **Actions → Manual release → Run workflow**, select `main`,
+enter a version, and choose **stable**, **beta**, or **alpha**.
+
+| Version input | Channel | Release tag |
+| --- | --- | --- |
+| `0.2.0` | stable | `v0.2.0` |
+| `0.2.0` | beta | `v0.2.0-beta.1` |
+| `0.2.0-alpha.2` | alpha | `v0.2.0-alpha.2` |
+
+The workflow runs tests and builds the platform-independent WASM plugin.
+Each release includes `EaglerXPumkin.wasm`, a zip with setup instructions,
+license and example configuration, and `SHA256SUMS`. Beta and alpha releases
+are marked as prereleases; stable releases are marked as latest.
+
+The selected version is embedded in the plugin during the build. The workflow
+creates a tag for the selected main commit without committing version bumps
+back to `main`. Existing tags are never overwritten. If publishing fails after
+creating a draft, its uploaded assets remain in that draft for inspection;
+remove the incomplete draft/tag before retrying the same version.
+Releases only run manually; pushing commits does not publish one.

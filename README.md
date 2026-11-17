@@ -29,7 +29,7 @@ profile. Gaius automatically uses the plugin's WebSocket listener on port 8081.
 - `rust/crates/eaglerx-pumpkin`: Pumpkin lifecycle, configuration, Eagler login,
   Minecraft compression, Gaius tunnel and shared networking runtime.
 - `rust/tests`: live 26.3 protocol probes.
-- [Roadmap](PUMPKIN_PORT_PLAN.md): current scope and future work.
+- [Roadmap](docs/PUMPKIN_PORT_PLAN.md): current scope and future work.
 
 ## Attribution
 

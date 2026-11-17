@@ -14,7 +14,7 @@ The original Phase 0 spike and Phase 1 core gateway are complete for this
 target. Later phases are partially adopted; the checklist below records the
 original plan's remaining work.
 
-See [setup and verification](rust/README.md) for commands and tested scope.
+See [setup and verification](../rust/README.md) for commands and tested scope.
 
 ## Implemented architecture
 

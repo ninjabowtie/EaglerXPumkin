@@ -172,6 +172,13 @@ From `rust/`, run unit tests on the native host (override the default WASI targe
 cargo test --workspace --target "$(rustc -vV | sed -n 's/^host: //p')"
 ```
 
+This also runs the real-socket integration tests in
+[crates/eaglerx-pumpkin/tests/gateway.rs](crates/eaglerx-pumpkin/tests/gateway.rs),
+which exercise the HTTP upgrade, animated MOTD frame cycling with the max-age
+close, malformed-session resilience and the connection rate limit through the
+runtime's poll loop with a background poller thread. No Pumpkin backend is
+required for those paths.
+
 With the real server and gateway running, from the repository root:
 
 ```sh
@@ -188,6 +195,21 @@ malformed lengths, Eagler login ordering, skin profile parsing and injected
 skin responses, per-address rate limiting, and animated MOTD frame cycling
 with the max-age close. This is not a throughput
 benchmark.
+
+For a sustained multi-client soak with fuzzing, with the real server and
+gateway running, from the repository root:
+
+```sh
+python3 rust/tests/soak_26_3.py --clients 5 --fuzz-clients 2 --seconds 120
+```
+
+The soak runs concurrent Eagler and Gaius players acting randomly, polls the
+MOTD query path as a periodic listener health check, and serves six malformed
+connection vectors that must each be closed by the gateway. It exits nonzero
+on any health-check failure, unexpected disconnect or unclosed fuzz
+connection, and prints periodic plus final counters. Use it together with the
+periodic `Eagler gateway:` diagnostics lines when tuning the connection limits
+for public deployments.
 
 ## Remaining port work
 

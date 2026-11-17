@@ -124,11 +124,16 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 
 - [x] Live probes for both transports (Eagler v5 handshake and Gaius tunnel).
 - [x] Unit coverage for framing, compression, login ordering, limits and rate
-  limiting.
+  limiting, plus real-socket integration tests that drive the runtime poll
+  loop end to end: HTTP upgrade, animated MOTD cycling, malformed-session
+  resilience, connection rate limiting and listener health.
 - [ ] Golden protocol captures replayed from Java-plugin traffic.
 - [ ] Scripted browser end-to-end client.
 - [ ] Vanilla Java client regression while the Eagler listener is active.
-- [ ] Sustained multi-client soak and fuzz run.
+- [ ] Sustained multi-client soak and fuzz run. The script
+  rust/tests/soak_26_3.py is provided and was validated against the native
+  gateway for its MOTD health-check and fuzz paths; a recorded sustained run
+  with concurrent game clients still needs a live server.
 - [ ] Tracked Pumpkin-release × Eagler-client version matrix.
 
 ## Next work

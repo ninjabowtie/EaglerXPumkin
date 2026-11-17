@@ -61,3 +61,5 @@ commit. Beta and alpha releases tag the already-built commit and never write to
 `main`. Existing tags and releases are never overwritten, and a failed publish
 removes the tag it created.
 Releases only run manually; pushing commits does not publish one.
+
+**Made with the help of artificial intelligence**

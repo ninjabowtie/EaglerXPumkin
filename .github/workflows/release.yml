@@ -312,7 +312,7 @@ jobs:
           created_tag=true
 
           printf '%s\n\n%s\n\n%s\n' \
-            "Pumpkin 26.3 WebSocket gateway — $RELEASE_CHANNEL release." \
+            "Pumpkin 26.3 WebSocket gateway - $RELEASE_CHANNEL release." \
             'Install EaglerXPumkin.wasm in your Pumpkin plugins/ folder. The zip includes setup instructions and example configuration.' \
             "Built from $release_sha with Rust $RUST_TOOLCHAIN for wasm32-wasip2." > release-notes.md
 

@@ -47,7 +47,7 @@ The plugin itself validates that backend destinations are loopback addresses.
 The original plan targeted full parity with the Java plugin. Checklist items are
 marked done only for the 26.3 gateway; annotations record scope changes.
 
-### Phase 0 — spike
+### Phase 0 - spike
 
 - [x] WASM plugin skeleton with metadata, permissions and `on_load` lifecycle.
 - [x] TCP listener and accept path through WASI sockets.
@@ -58,7 +58,7 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - [ ] Record throughput/latency micro-benchmark numbers. Periodic counters now
   exist, but no benchmark run has been recorded.
 
-### Phase 1 — core connect and play
+### Phase 1 - core connect and play
 
 - [x] Configurable Eagler listener and HTTP upgrade detection.
 - [x] Binary WebSocket frames, close/ping/pong and 64 KiB+ payload handling.
@@ -72,7 +72,7 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - [ ] Original 1.8/1.12 client exit criterion. Only 26.3 is supported; older
   clients need a translation layer and their own validation.
 
-### Phase 2 — full Eagler protocol layer
+### Phase 2 - full Eagler protocol layer
 
 - [x] Skin pipeline: Eagler v5 `skin_v1`/`skin_v2`/`cape_v1` profile data,
   custom 64x64 uploads, deterministic Steve/Alex fallback, and an in-memory
@@ -94,7 +94,7 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - [ ] Password/account registration. Not applicable: Eaglercraft uses offline
   accounts, so the offline username model is the intended behaviour.
 
-### Phase 3 — ecosystem addons
+### Phase 3 - ecosystem addons
 
 - [ ] EaglerWeb file hosting. Deferred; not needed for the first release.
 - [ ] EaglerXRewind 1.5.2 support. Deferred with older-client support.

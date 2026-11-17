@@ -10,7 +10,7 @@
 use std::io::{Read, Write};
 
 // ---------------------------------------------------------------------------
-// SHA-1 (RFC 3174) — only needed for the WS key hash; not security-sensitive.
+// SHA-1 (RFC 3174) - only needed for the WS key hash; not security-sensitive.
 // ---------------------------------------------------------------------------
 
 pub fn sha1(data: &[u8]) -> [u8; 20] {

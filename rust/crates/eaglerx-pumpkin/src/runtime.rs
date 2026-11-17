@@ -518,6 +518,10 @@ impl Connection {
         } else if self.backend_eof {
             self.close_ws(1000)?;
         }
+        if self.session.is_animating_motd() {
+            self.session.motd_tick(cfg, online, Instant::now());
+            self.drain_session(cfg)?;
+        }
         self.client_out.flush(&mut self.client)?;
         if let Some(backend) = &mut self.backend {
             self.backend_out.flush(backend)?;
@@ -527,6 +531,7 @@ impl Connection {
         }
         if self.mode != Mode::Raw
             && !(self.session.is_playing() || self.tunnel && self.backend.is_some())
+            && !self.session.is_animating_motd()
             && self.started.elapsed() > Duration::from_secs(30)
         {
             return Ok(false);

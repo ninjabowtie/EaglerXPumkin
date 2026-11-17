@@ -18,4 +18,10 @@ notification_body = ""
 notification_source = ""
 notification_hide_after_secs = 10
 notification_expire_after_secs = 3600
+# Optional MOTD animation. Frames cycle on each MOTD query connection until
+# the close age is reached. Each entry is one or two lines separated by \n.
+# Leave motd_frames empty for the static MOTD above.
+motd_frames = []
+motd_interval_ms = 250
+motd_close_after_ms = 60000
 motd = "EaglerXPumpkin\nMinecraft 26.3"

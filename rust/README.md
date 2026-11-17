@@ -94,6 +94,26 @@ debug/warn level. The counters are cumulative and reset only on plugin reload;
 use the periodic throughput figures for sustained-load measurements rather than
 wall-clock timers in the client.
 
+## MOTD and animations
+
+The `motd` string answers Eagler server-list queries with up to two lines and
+is sent once per query with `"cache": true`, after which the query connection
+closes.
+
+Set `motd_frames` to animate it instead. Each entry is one full frame in the
+same `line1\nline2` format (up to 32 frames, 2048 bytes each). The query
+connection then stays open: frames cycle every `motd_interval_ms`
+(1..=60000) and the connection is force-closed after `motd_close_after_ms`
+(1..=3600000, at least the interval), mirroring EaglerMOTD's interval and
+`close_socket_after`. Animated frames are sent with `"cache": false` and the
+reference's epoch-millisecond timestamp so browsers re-query the sequence
+instead of caching a stale picture. The gateway sends at most one frame per
+server tick, so intervals below ~50 ms collapse to tick granularity.
+
+Animation is limited to cycling text frames: per-frame server icons, sprite
+sheets, weighted message pools, named message chains and the cache-control
+query subtypes of the EaglerMOTD addon are not ported.
+
 ## Skins
 
 Eagler v5 players send `skin_v1`/`skin_v2`/`cape_v1` profile data during login.
@@ -165,7 +185,8 @@ Each received 32 registries and 118 chunks (approximately 7.7 MB of Minecraft
 packet bodies). Unit coverage includes partial TCP reads/writes, incremental
 WebSocket fragmentation, 64 KiB+ frames, HTTP upgrades, compression transitions,
 malformed lengths, Eagler login ordering, skin profile parsing and injected
-skin responses, and per-address rate limiting. This is not a throughput
+skin responses, per-address rate limiting, and animated MOTD frame cycling
+with the max-age close. This is not a throughput
 benchmark.
 
 ## Remaining port work

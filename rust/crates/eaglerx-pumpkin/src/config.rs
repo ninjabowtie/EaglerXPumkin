@@ -3,6 +3,7 @@ use std::{
     fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::Path,
+    time::Duration,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -27,6 +28,9 @@ pub struct Config {
     pub notification_hide_after_secs: u8,
     pub notification_expire_after_secs: u16,
     pub motd: String,
+    pub motd_frames: Vec<String>,
+    pub motd_interval_ms: u16,
+    pub motd_close_after_ms: u32,
 }
 
 impl Default for Config {
@@ -51,6 +55,9 @@ impl Default for Config {
             notification_hide_after_secs: 10,
             notification_expire_after_secs: 3600,
             motd: "EaglerXPumpkin\nMinecraft 26.3".into(),
+            motd_frames: Vec::new(),
+            motd_interval_ms: 250,
+            motd_close_after_ms: 60_000,
         }
     }
 }
@@ -133,6 +140,35 @@ impl Config {
         if self.server_address.is_empty() || self.server_address.len() > 255 {
             return Err("server_address must contain 1..255 bytes".into());
         }
+        if self.motd_frames.len() > 32 {
+            return Err("motd_frames must contain at most 32 frames".into());
+        }
+        for frame in &self.motd_frames {
+            if frame.is_empty() || frame.len() > 2048 {
+                return Err("each motd_frames entry must contain 1..2048 bytes".into());
+            }
+        }
+        if self.motd_interval_ms > 60_000 {
+            return Err("motd_interval_ms must be at most 60000".into());
+        }
+        if self.motd_close_after_ms > 3_600_000 {
+            return Err("motd_close_after_ms must be at most 3600000".into());
+        }
+        if !self.motd_frames.is_empty() {
+            if self.motd_interval_ms == 0 {
+                return Err("motd_interval_ms must be between 1 and 60000 when motd_frames is set"
+                    .into());
+            }
+            if self.motd_close_after_ms == 0 {
+                return Err(
+                    "motd_close_after_ms must be between 1 and 3600000 when motd_frames is set"
+                        .into(),
+                );
+            }
+            if (self.motd_close_after_ms as u64) < self.motd_interval_ms as u64 {
+                return Err("motd_close_after_ms must be at least motd_interval_ms".into());
+            }
+        }
         Ok(())
     }
 
@@ -154,6 +190,14 @@ impl Config {
             &self.notification_title,
             &self.notification_body,
             &self.notification_source,
+        ))
+    }
+    /// Animated MOTD settings: frame interval and query max age. Only active
+    /// when at least one animation frame is configured.
+    pub fn motd_animation(&self) -> Option<(Duration, Duration)> {
+        (!self.motd_frames.is_empty()).then_some((
+            Duration::from_millis(u64::from(self.motd_interval_ms)),
+            Duration::from_millis(u64::from(self.motd_close_after_ms)),
         ))
     }
 }
@@ -217,6 +261,72 @@ mod tests {
         Config {
             ip_allowlist: vec!["192.168.0.0/16".into(), "::1".into()],
             ip_blocklist: vec!["192.168.1.7".into()],
+            ..Config::default()
+        }
+        .validate()
+        .unwrap();
+    }
+
+    #[test]
+    fn motd_animation_config_ranges_are_validated() {
+        let ok = Config {
+            motd_frames: vec!["a\nb".into()],
+            motd_interval_ms: 50,
+            motd_close_after_ms: 60_000,
+            ..Config::default()
+        };
+        ok.validate().unwrap();
+        for bad in [
+            Config {
+                motd_frames: vec!["a".into()],
+                motd_interval_ms: 0,
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec!["a".into()],
+                motd_interval_ms: 60_001,
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec!["a".into()],
+                motd_close_after_ms: 0,
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec!["a".into()],
+                motd_close_after_ms: 3_600_001,
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec!["a".into()],
+                motd_interval_ms: 100,
+                motd_close_after_ms: 50,
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec!["a".into(); 33],
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec![],
+                motd_interval_ms: 60_001,
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec![String::from_utf8_lossy(&[b'a'; 2049]).into_owned()],
+                ..Config::default()
+            },
+            Config {
+                motd_frames: vec![String::new()],
+                ..Config::default()
+            },
+        ] {
+            assert!(bad.validate().is_err());
+        }
+        // With no frames the interval and close age are unused and may be zero.
+        Config {
+            motd_interval_ms: 0,
+            motd_close_after_ms: 0,
             ..Config::default()
         }
         .validate()

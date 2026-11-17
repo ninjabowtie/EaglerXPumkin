@@ -11,7 +11,7 @@ use eagler_ws::{Message, OP_BIN, OP_TEXT};
 use md5::{Digest, Md5};
 use std::{
     collections::HashSet,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,6 +21,19 @@ enum Stage {
     BackendLogin,
     Profiles,
     Play,
+    Motd,
+}
+
+/// Per-connection MOTD animation state, ported from EaglerMOTD's
+/// EaglerMOTDConnectionUpdater. The poll loop replaces its tick timer: each
+/// poll cycles to the next frame once the interval has elapsed and
+/// force-closes the query connection after the max age.
+struct MotdAnim {
+    frame: usize,
+    interval: Duration,
+    close_after: Duration,
+    started: Instant,
+    next_frame: Instant,
 }
 
 pub struct Session {
@@ -34,6 +47,7 @@ pub struct Session {
     profile_bytes: usize,
     player_skin: PlayerSkin,
     capabilities: u32,
+    motd: Option<MotdAnim>,
     stalled: Vec<Vec<u8>>,
     stalled_bytes: usize,
     pub client_output: Vec<Message>,
@@ -55,6 +69,7 @@ impl Default for Session {
             profile_bytes: 0,
             player_skin: PlayerSkin::default(),
             capabilities: 0,
+            motd: None,
             stalled: Vec::new(),
             stalled_bytes: 0,
             client_output: Vec::new(),
@@ -68,6 +83,28 @@ impl Default for Session {
 fn ascii(out: &mut Vec<u8>, text: &str) {
     out.push(text.len() as u8);
     out.extend_from_slice(text.as_bytes());
+}
+
+/// Serialize one MOTD query response. Animated frames disable client-side
+/// caching (so the browser re-queries the sequence) and carry the reference's
+/// epoch-millisecond timestamp; static answers keep the verified shape.
+fn motd_frame(cfg: &Config, online: usize, frame: &[&str], animated: bool) -> Vec<u8> {
+    let time = if animated {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis() as u64)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    serde_json::json!({
+        "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
+        "cracked": true, "secure": false, "type": "motd", "time": time,
+        "data": { "motd": frame, "cache": !animated, "icon": false,
+            "online": online, "max": cfg.max_connections, "players": [] }
+    })
+    .to_string()
+    .into_bytes()
 }
 
 /// Optional capabilities this gateway can provide with its current config.
@@ -91,6 +128,51 @@ impl Session {
     }
     pub fn is_playing(&self) -> bool {
         self.stage == Stage::Play
+    }
+    /// Whether this connection is an animated MOTD query the poll loop must
+    /// drive until its max age.
+    pub fn is_animating_motd(&self) -> bool {
+        self.motd.is_some()
+    }
+    /// Push one animation frame as a text WebSocket message.
+    fn send_motd(&mut self, cfg: &Config, online: usize, frame: usize) {
+        let lines: Vec<&str> = cfg.motd_frames[frame].lines().take(2).collect();
+        self.client_output.push(Message {
+            opcode: OP_TEXT,
+            payload: motd_frame(cfg, online, &lines, true),
+        });
+    }
+    /// Advance the MOTD animation one poll: cycle to the next frame when the
+    /// interval has elapsed and force-close once the max age is reached.
+    /// Returns after at most one frame per poll, matching EaglerMOTD's tick
+    /// granularity.
+    pub fn motd_tick(&mut self, cfg: &Config, online: usize, now: Instant) {
+        if self.motd.is_none() {
+            return;
+        }
+        if self.closing {
+            self.motd = None;
+            return;
+        }
+        let expired = match &self.motd {
+            Some(anim) => {
+                if now < anim.next_frame {
+                    return;
+                }
+                now.duration_since(anim.started) >= anim.close_after
+            }
+            None => return,
+        };
+        if expired {
+            self.closing = true;
+            self.motd = None;
+            return;
+        }
+        let anim = self.motd.as_mut().unwrap();
+        anim.next_frame = now + anim.interval;
+        anim.frame = (anim.frame + 1) % cfg.motd_frames.len();
+        let frame = anim.frame;
+        self.send_motd(cfg, online, frame);
     }
     pub fn uuid(&self) -> [u8; 16] {
         self.uuid
@@ -139,6 +221,22 @@ impl Session {
             let request = std::str::from_utf8(&message.payload).map_err(|_| "invalid query")?;
             if !request.to_ascii_lowercase().starts_with("accept: motd") {
                 return Err("unsupported query".into());
+            }
+            if let Some((interval, close_after)) = cfg.motd_animation() {
+                // Animated MOTD, ported from EaglerMOTD: answer with the first
+                // frame and keep the query connection open. The poll loop
+                // drives the remaining frames and the max-age close.
+                let now = Instant::now();
+                self.motd = Some(MotdAnim {
+                    frame: 0,
+                    interval,
+                    close_after,
+                    started: now,
+                    next_frame: now + interval,
+                });
+                self.send_motd(cfg, online, 0);
+                self.stage = Stage::Motd;
+                return Ok(());
             }
             let response = serde_json::json!({
                 "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
@@ -674,6 +772,90 @@ mod tests {
         );
         assert!(session.backend_output.is_empty());
         assert!(session.client_output.is_empty());
+    }
+
+    #[test]
+    fn static_motd_query_answers_and_closes() {
+        let cfg = Config::default();
+        let mut session = Session::default();
+        let mut store = SkinStore::default();
+        session
+            .client_message(
+                Message {
+                    opcode: OP_TEXT,
+                    payload: b"Accept: MOTD".to_vec(),
+                },
+                &cfg,
+                2,
+                &mut store,
+            )
+            .unwrap();
+        assert!(session.closing);
+        assert!(!session.is_animating_motd());
+        let text = String::from_utf8(session.client_output[0].payload.clone()).unwrap();
+        assert!(text.contains("\"cache\":true"));
+        assert!(text.contains("\"online\":2"));
+        assert!(text.contains("Minecraft 26.3"));
+    }
+
+    #[test]
+    fn animated_motd_cycles_frames_then_closes_after_max_age() {
+        let cfg = Config {
+            motd_frames: vec!["A\nB".into(), "C\nD".into(), "E".into()],
+            motd_interval_ms: 50,
+            motd_close_after_ms: 1000,
+            ..Config::default()
+        };
+        cfg.validate().unwrap();
+        let mut session = Session::default();
+        let mut store = SkinStore::default();
+        session
+            .client_message(
+                Message {
+                    opcode: OP_TEXT,
+                    payload: b"Accept: MOTD".to_vec(),
+                },
+                &cfg,
+                0,
+                &mut store,
+            )
+            .unwrap();
+        assert!(!session.closing);
+        assert!(session.is_animating_motd());
+        let t0 = Instant::now(); // after the query, so timers are bounded by t0
+        let text = String::from_utf8(session.client_output[0].payload.clone()).unwrap();
+        assert!(text.contains("\"cache\":false"));
+        assert!(text.contains("[\"A\",\"B\"]"));
+        assert_eq!(session.client_output.len(), 1);
+
+        // Before the interval elapses nothing new is queued.
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(20));
+        assert_eq!(session.client_output.len(), 1);
+        // Frame 1 at the interval boundary.
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(60));
+        let text = String::from_utf8(session.client_output[1].payload.clone()).unwrap();
+        assert!(text.contains("[\"C\",\"D\"]"));
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(80));
+        assert_eq!(session.client_output.len(), 2);
+        // Frame 2, then wrap around to the first frame.
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(120));
+        assert!(
+            String::from_utf8(session.client_output[2].payload.clone())
+                .unwrap()
+                .contains("[\"E\"]")
+        );
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(190));
+        assert!(
+            String::from_utf8(session.client_output[3].payload.clone())
+                .unwrap()
+                .contains("[\"A\",\"B\"]")
+        );
+        // The max age force-closes the query connection and stops the animation.
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(1100));
+        assert!(session.closing);
+        assert!(!session.is_animating_motd());
+        session.motd_tick(&cfg, 0, t0 + Duration::from_millis(1200));
+        assert_eq!(session.client_output.len(), 4);
     }
 
     #[test]

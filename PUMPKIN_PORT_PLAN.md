@@ -96,7 +96,14 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   when configured and supported by the client.
 - [ ] Backend-driven notifications and message channels, including custom badge
   icons and per-event delivery.
-- [ ] MOTD animations.
+- [x] MOTD animations. Text frames cycle on the query connection with the
+  configured interval and are force-closed after the max age, matching
+  EaglerMOTD's interval/close_socket_after mechanics and disabling the
+  client-side cache while animated. Scoped port: per-frame server icons,
+  sprite sheets, weighted message pools, named message chains and the
+  cache-control query subtypes of the EaglerMOTD addon are not ported. The
+  graphical client verified so far (Gaius) uses `/tunnel` and does not
+  exercise the MOTD query path, so this is unit-test coverage only.
 - [x] IPv4/IPv6 allow and block lists with CIDR prefixes, evaluated before the
   connection rate limiter.
 - [ ] Player whitelisting and UUID ban masks. Offline accounts make identity

@@ -2,7 +2,7 @@
 name = "eagler-ws"
 version.workspace = true
 edition.workspace = true
-description = "Minimal server-side WebSocket (RFC 6455) framing for the EaglerXPumkin plugin; std-only, wasm-ready."
+description = "Minimal server-side WebSocket (RFC 6455) framing for the EaglerXPumpkin plugin; std-only, wasm-ready."
 
 [dependencies]
 # intentionally empty: no external deps so this compiles cleanly on wasm targets

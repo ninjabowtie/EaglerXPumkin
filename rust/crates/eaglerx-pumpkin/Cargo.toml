@@ -1,5 +1,5 @@
 [package]
-name = "eaglerx-pumkin"
+name = "eaglerx-pumpkin"
 version.workspace = true
 edition.workspace = true
 description = "Eaglercraft and Gaius WebSocket gateway for Pumpkin Minecraft 26.3."

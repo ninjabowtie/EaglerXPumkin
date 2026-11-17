@@ -35,7 +35,7 @@ def stamp_workspace(root: Path, version: str) -> None:
     old = manifest["workspace"]["package"]["version"]
     lock_text = lock_path.read_text()
     lock = tomllib.loads(lock_text)
-    names = {"eagler-ws", "eaglerx-pumkin"}
+    names = {"eagler-ws", "eaglerx-pumpkin"}
     packages = [p for p in lock["package"] if p["name"] in names and "source" not in p]
     if {p["name"] for p in packages} != names or any(p["version"] != old for p in packages):
         raise ValueError("workspace versions and Cargo.lock do not match")

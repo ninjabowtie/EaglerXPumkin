@@ -141,7 +141,7 @@ impl Session {
                 return Err("unsupported query".into());
             }
             let response = serde_json::json!({
-                "name": "EaglerXPumkin", "brand": "EaglerXPumkin", "vers": env!("CARGO_PKG_VERSION"),
+                "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
                 "cracked": true, "secure": false, "type": "motd", "time": 0,
                 "data": { "motd": cfg.motd.lines().take(2).collect::<Vec<_>>(), "cache": true,
                     "icon": false, "online": online, "max": cfg.max_connections, "players": [] }
@@ -208,7 +208,7 @@ impl Session {
                 let mut packet = vec![2];
                 packet.extend_from_slice(&self.version.to_be_bytes());
                 packet.extend_from_slice(&self.protocol.to_be_bytes());
-                ascii(&mut packet, "EaglerXPumkin");
+                ascii(&mut packet, "EaglerXPumpkin");
                 ascii(&mut packet, env!("CARGO_PKG_VERSION"));
                 packet.extend_from_slice(&[0, 0, 0]); // no authentication, zero salt
                 if self.version >= 5 {
@@ -683,7 +683,7 @@ mod tests {
             pause_menu_url: "https://example.com".into(),
             notification_title: "Welcome".into(),
             notification_body: "Have fun".into(),
-            notification_source: "EaglerXPumkin".into(),
+            notification_source: "EaglerXPumpkin".into(),
             ..Config::default()
         };
         let mut session = Session::default();
@@ -746,6 +746,6 @@ mod tests {
         assert_eq!(r.take(16).unwrap().len(), 16);
         assert_eq!(r.text(32767).unwrap(), "{\"text\":\"Have fun\"}");
         assert_eq!(r.text(255).unwrap(), "{\"text\":\"Welcome\"}");
-        assert_eq!(r.text(255).unwrap(), "{\"text\":\"EaglerXPumkin\"}");
+        assert_eq!(r.text(255).unwrap(), "{\"text\":\"EaglerXPumpkin\"}");
     }
 }

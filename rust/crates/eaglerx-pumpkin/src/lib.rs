@@ -33,10 +33,10 @@ mod plugin {
         }
         fn metadata(&self) -> PluginMetadata {
             PluginMetadata {
-                name: "eaglerx-pumkin".into(),
+                name: "eaglerx-pumpkin".into(),
                 version: env!("CARGO_PKG_VERSION").into(),
                 authors: vec![
-                    "EaglerXPumkin contributors".into(),
+                    "EaglerXPumpkin contributors".into(),
                     "lax1dude (original EaglerXServer)".into(),
                 ],
                 description: "Eaglercraft gateway for Minecraft 26.3 on Pumpkin".into(),
@@ -67,7 +67,7 @@ mod plugin {
                 }
             });
             *self.running.lock().map_err(|e| e.to_string())? = Some(Running { task, runtime });
-            tracing::info!("EaglerXPumkin loaded; scheduler listener active");
+            tracing::info!("EaglerXPumpkin loaded; scheduler listener active");
             Ok(())
         }
         fn on_unload(&self, _context: Context) -> Result<(), String> {

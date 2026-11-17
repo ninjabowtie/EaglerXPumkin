@@ -1,4 +1,4 @@
-# EaglerXPumkin
+# EaglerXPumpkin
 
 A Rust WebSocket gateway for **Pumpkin Minecraft 26.3**, distributed as a
 WASI Preview 2 plugin. Includes a native CLI for development.
@@ -16,7 +16,7 @@ rustup target add wasm32-wasip2
 ./rust/build.sh
 ```
 
-Install `rust/dist/EaglerXPumkin.wasm` in Pumpkin's `plugins/` folder.
+Install `rust/dist/EaglerXPumpkin.wasm` in Pumpkin's `plugins/` folder.
 See [setup and configuration](rust/README.md) for offline-mode settings,
 permissions, connection addresses and verification commands.
 
@@ -26,7 +26,7 @@ profile. Gaius automatically uses the plugin's WebSocket listener on port 8081.
 ## Project layout
 
 - `rust/crates/eagler-ws`: incremental WebSocket framing and HTTP upgrades.
-- `rust/crates/eaglerx-pumkin`: Pumpkin lifecycle, configuration, Eagler login,
+- `rust/crates/eaglerx-pumpkin`: Pumpkin lifecycle, configuration, Eagler login,
   Minecraft compression, Gaius tunnel and shared networking runtime.
 - `rust/tests`: live 26.3 protocol probes.
 - [Roadmap](PUMPKIN_PORT_PLAN.md): current scope and future work.
@@ -51,7 +51,7 @@ enter a version, and choose **stable**, **beta**, or **alpha**.
 | `0.2.0-alpha.2` | alpha | `v0.2.0-alpha.2` |
 
 The workflow runs tests and builds the platform-independent WASM plugin.
-Each release includes `EaglerXPumkin.wasm`, a zip with setup instructions,
+Each release includes `EaglerXPumpkin.wasm`, a zip with setup instructions,
 license and example configuration, and `SHA256SUMS`. Beta and alpha releases
 are marked as prereleases; stable releases are marked as latest.
 

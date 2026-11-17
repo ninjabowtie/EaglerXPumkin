@@ -156,7 +156,7 @@ jobs:
           cargo test --locked --workspace --target x86_64-unknown-linux-gnu
           cargo clippy --locked --workspace --all-targets \
             --target x86_64-unknown-linux-gnu -- -D warnings
-          cargo clippy --locked --lib -p eaglerx-pumkin \
+          cargo clippy --locked --lib -p eaglerx-pumpkin \
             --target wasm32-wasip2 -- -D warnings
 
       - name: Build Pumpkin plugin
@@ -183,9 +183,9 @@ jobs:
           }, indent=2) + '\n')
           PY
           cd rust/dist
-          zip "EaglerXPumkin-$RELEASE_VERSION.zip" \
-            EaglerXPumkin.wasm LICENSE README.md eagler.example.toml release.json
-          sha256sum EaglerXPumkin.wasm "EaglerXPumkin-$RELEASE_VERSION.zip" > SHA256SUMS
+          zip "EaglerXPumpkin-$RELEASE_VERSION.zip" \
+            EaglerXPumpkin.wasm LICENSE README.md eagler.example.toml release.json
+          sha256sum EaglerXPumpkin.wasm "EaglerXPumpkin-$RELEASE_VERSION.zip" > SHA256SUMS
 
       - name: Store release assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -194,8 +194,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: |
-            rust/dist/EaglerXPumkin.wasm
-            rust/dist/EaglerXPumkin-*.zip
+            rust/dist/EaglerXPumpkin.wasm
+            rust/dist/EaglerXPumpkin-*.zip
             rust/dist/SHA256SUMS
 
   publish:
@@ -313,15 +313,15 @@ jobs:
 
           printf '%s\n\n%s\n\n%s\n' \
             "Pumpkin 26.3 WebSocket gateway - $RELEASE_CHANNEL release." \
-            'Install EaglerXPumkin.wasm in your Pumpkin plugins/ folder. The zip includes setup instructions and example configuration.' \
+            'Install EaglerXPumpkin.wasm in your Pumpkin plugins/ folder. The zip includes setup instructions and example configuration.' \
             "Built from $release_sha with Rust $RUST_TOOLCHAIN for wasm32-wasip2." > release-notes.md
 
           assets=(
-            dist/EaglerXPumkin.wasm
-            "dist/EaglerXPumkin-$RELEASE_VERSION.zip"
+            dist/EaglerXPumpkin.wasm
+            "dist/EaglerXPumpkin-$RELEASE_VERSION.zip"
             dist/SHA256SUMS
           )
-          flags=(--verify-tag --title "EaglerXPumkin $RELEASE_VERSION" --notes-file release-notes.md)
+          flags=(--verify-tag --title "EaglerXPumpkin $RELEASE_VERSION" --notes-file release-notes.md)
           if [ "$RELEASE_CHANNEL" = stable ]; then
             flags+=(--latest)
           else

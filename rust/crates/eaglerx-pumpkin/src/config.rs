@@ -50,7 +50,7 @@ impl Default for Config {
             notification_source: String::new(),
             notification_hide_after_secs: 10,
             notification_expire_after_secs: 3600,
-            motd: "EaglerXPumkin\nMinecraft 26.3".into(),
+            motd: "EaglerXPumpkin\nMinecraft 26.3".into(),
         }
     }
 }
@@ -230,7 +230,7 @@ mod tests {
             pause_menu_url: "https://example.com/invite".into(),
             notification_title: "Welcome".into(),
             notification_body: "Have fun".into(),
-            notification_source: "EaglerXPumkin".into(),
+            notification_source: "EaglerXPumpkin".into(),
             ..Config::default()
         };
         assert_eq!(

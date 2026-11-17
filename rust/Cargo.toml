@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/eagler-ws",
-    "crates/eaglerx-pumkin",
+    "crates/eaglerx-pumpkin",
 ]
 
 [workspace.package]

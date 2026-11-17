@@ -18,7 +18,7 @@ See [setup and verification](rust/README.md) for commands and tested scope.
 
 ## Implemented architecture
 
-- Build `EaglerXPumkin.wasm` for `wasm32-wasip2` with the pinned Pumpkin v0.1 API.
+- Build `EaglerXPumpkin.wasm` for `wasm32-wasip2` with the pinned Pumpkin v0.1 API.
 - Poll a nonblocking listener and connection state machines from Pumpkin's
   scheduler. No guest threads or socket cloning are required.
 - Listen on a separate WebSocket port (8081 by default) and connect only to the

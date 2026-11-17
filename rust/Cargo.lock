@@ -99,7 +99,7 @@ name = "eagler-ws"
 version = "0.1.0"
 
 [[package]]
-name = "eaglerx-pumkin"
+name = "eaglerx-pumpkin"
 version = "0.1.0"
 dependencies = [
  "eagler-ws",

@@ -48,7 +48,7 @@ class ReleaseTests(unittest.TestCase):
             after = tomllib.loads((root / "Cargo.lock").read_text())
             self.assertEqual(manifest["workspace"]["package"]["version"], "2.3.4-beta.2")
             for old, new in zip(before["package"], after["package"], strict=True):
-                if old["name"] in ("eagler-ws", "eaglerx-pumkin"):
+                if old["name"] in ("eagler-ws", "eaglerx-pumpkin"):
                     self.assertEqual(new["version"], "2.3.4-beta.2")
                     new["version"] = old["version"]
                 self.assertEqual(old, new)

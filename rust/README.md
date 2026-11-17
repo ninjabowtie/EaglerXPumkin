@@ -34,10 +34,10 @@ rustup target add wasm32-wasip2
 ./rust/build.sh
 ```
 
-Copy `rust/dist/EaglerXPumkin.wasm` to your Pumpkin server's `plugins/` folder.
+Copy `rust/dist/EaglerXPumpkin.wasm` to your Pumpkin server's `plugins/` folder.
 Start Pumpkin and grant the plugin's requested permissions:
 `network.tcp.bind`, `network.tcp.connect`, `fs.read.data`, `fs.write.data`.
-The plugin creates `plugins/data/eaglerx-pumkin/eagler.toml` on first load.
+The plugin creates `plugins/data/eaglerx-pumpkin/eagler.toml` on first load.
 A listener or config error fails the plugin load instead of pretending to run.
 
 Pumpkin's v0.1 plugin host uses WASI Preview 2. Do not change the build to
@@ -118,7 +118,7 @@ pause_menu_button = "Discord"
 pause_menu_url = "https://example.com/invite"
 notification_title = "Welcome"
 notification_body = "Have fun!"
-notification_source = "EaglerXPumkin"
+notification_source = "EaglerXPumpkin"
 notification_hide_after_secs = 10
 notification_expire_after_secs = 3600
 ```

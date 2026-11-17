@@ -2,13 +2,16 @@
 use crate::{config::Config, session::Session};
 use eagler_ws::{self as ws, Decoder, OP_BIN, OP_CLOSE, OP_PING, OP_PONG, OP_TEXT};
 use std::{
+    collections::{HashMap, VecDeque},
     io::{self, ErrorKind, Read, Write},
-    net::{Shutdown, TcpListener, TcpStream},
+    net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream},
     time::{Duration, Instant},
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 const MAX_QUEUE: usize = 16 * 1024 * 1024;
 const IO_BUDGET: usize = 256 * 1024;
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+const MAX_TRACKED_ADDRESSES: usize = 4096;
 
 #[derive(Default)]
 struct Queue {
@@ -59,8 +62,139 @@ enum Mode {
     WebSocket,
     Raw,
 }
+
+/// Lifetime counters, with throughput measured since the previous report.
+struct Stats {
+    accepted: u64,
+    closed: u64,
+    refused: u64,
+    rate_limited: u64,
+    client_bytes: u64,
+    backend_bytes: u64,
+    peak_connections: usize,
+    peak_playing: usize,
+    interval: Duration,
+    last_report: Instant,
+    last_client_bytes: u64,
+    last_backend_bytes: u64,
+}
+
+impl Stats {
+    fn new(interval: Duration) -> Self {
+        Self {
+            accepted: 0,
+            closed: 0,
+            refused: 0,
+            rate_limited: 0,
+            client_bytes: 0,
+            backend_bytes: 0,
+            peak_connections: 0,
+            peak_playing: 0,
+            interval,
+            last_report: Instant::now(),
+            last_client_bytes: 0,
+            last_backend_bytes: 0,
+        }
+    }
+
+    fn report(&mut self, active: usize, playing: usize) {
+        if self.interval.is_zero() {
+            return;
+        }
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_report);
+        if elapsed < self.interval {
+            return;
+        }
+        self.last_report = now;
+        let seconds = elapsed.as_secs_f64();
+        let client_bytes = self.client_bytes - self.last_client_bytes;
+        let backend_bytes = self.backend_bytes - self.last_backend_bytes;
+        self.last_client_bytes = self.client_bytes;
+        self.last_backend_bytes = self.backend_bytes;
+        info!(
+            "Eagler gateway: {active} active ({playing} playing, peaks {} / {}), \
+             {} accepted, {} closed, {} refused, {} rate-limited; \
+             {:.1} KiB/s client->backend, {:.1} KiB/s backend->client",
+            self.peak_connections,
+            self.peak_playing,
+            self.accepted,
+            self.closed,
+            self.refused,
+            self.rate_limited,
+            client_bytes as f64 / 1024.0 / seconds,
+            backend_bytes as f64 / 1024.0 / seconds,
+        );
+    }
+}
+
+/// Per-source-address accept limit over a fixed window. Rejected attempts are
+/// counted by [`Stats`], not here, and the map is pruned opportunistically.
+struct RateLimit {
+    limit: u32,
+    clients: HashMap<IpAddr, VecDeque<Instant>>,
+}
+
+impl RateLimit {
+    fn new(per_minute: u32) -> Self {
+        Self {
+            limit: per_minute,
+            clients: HashMap::new(),
+        }
+    }
+
+    fn allow(&mut self, ip: IpAddr, now: Instant) -> bool {
+        if self.limit == 0 {
+            return true;
+        }
+        let attempts = self.clients.entry(ip).or_default();
+        while attempts
+            .front()
+            .is_some_and(|t| now.saturating_duration_since(*t) >= RATE_LIMIT_WINDOW)
+        {
+            attempts.pop_front();
+        }
+        if attempts.len() >= self.limit as usize {
+            return false;
+        }
+        attempts.push_back(now);
+        if self.clients.len() > MAX_TRACKED_ADDRESSES {
+            self.prune(now);
+        }
+        true
+    }
+
+    fn prune(&mut self, now: Instant) {
+        self.clients.retain(|_, attempts| {
+            while attempts
+                .front()
+                .is_some_and(|t| now.saturating_duration_since(*t) >= RATE_LIMIT_WINDOW)
+            {
+                attempts.pop_front();
+            }
+            !attempts.is_empty()
+        });
+        while self.clients.len() > MAX_TRACKED_ADDRESSES {
+            // Every tracked address is still inside the window. Evict the least
+            // recently active one so memory stays bounded under address churn.
+            let oldest = self
+                .clients
+                .iter()
+                .min_by_key(|(_, attempts)| *attempts.back().expect("non-empty"))
+                .map(|(ip, _)| *ip);
+            match oldest {
+                Some(ip) => {
+                    self.clients.remove(&ip);
+                }
+                None => break,
+            }
+        }
+    }
+}
+
 struct Connection {
     client: TcpStream,
+    peer: SocketAddr,
     backend: Option<TcpStream>,
     mode: Mode,
     header: Vec<u8>,
@@ -79,11 +213,12 @@ struct Connection {
     backend_write_closed: bool,
 }
 impl Connection {
-    fn new(client: TcpStream) -> io::Result<Self> {
+    fn new(client: TcpStream, peer: SocketAddr) -> io::Result<Self> {
         client.set_nonblocking(true)?;
         client.set_nodelay(true)?;
         Ok(Self {
             client,
+            peer,
             backend: None,
             mode: Mode::Sniff,
             header: Vec::new(),
@@ -273,7 +408,7 @@ impl Connection {
         }
         Ok(())
     }
-    fn step(&mut self, cfg: &Config, online: usize) -> io::Result<bool> {
+    fn step(&mut self, cfg: &Config, online: usize, stats: &mut Stats) -> io::Result<bool> {
         if self.client_out.flush(&mut self.client)? {
             self.active = Instant::now();
         }
@@ -300,6 +435,7 @@ impl Connection {
                 Ok(n) => {
                     self.active = Instant::now();
                     read += n;
+                    stats.client_bytes += n as u64;
                     self.client_bytes(&buffer[..n], cfg, online)?;
                     if self.closing.is_some() {
                         break;
@@ -328,6 +464,7 @@ impl Connection {
                 Ok(n) => {
                     self.active = Instant::now();
                     read += n;
+                    stats.backend_bytes += n as u64;
                     if self.mode == Mode::Raw {
                         self.client_out.push(&buffer[..n])?;
                     } else if self.tunnel {
@@ -390,6 +527,8 @@ pub struct Runtime {
     listener: TcpListener,
     config: Config,
     connections: Vec<Connection>,
+    rate_limit: RateLimit,
+    stats: Stats,
 }
 impl Runtime {
     pub fn bind(config: Config) -> io::Result<Self> {
@@ -397,13 +536,20 @@ impl Runtime {
         let listener = TcpListener::bind(config.listen_addr())?;
         listener.set_nonblocking(true)?;
         info!(
-            "Eagler listener on {} -> {} (MC protocol {})",
+            "Eagler listener on {} -> {} (MC protocol {}, {} connections/minute per address)",
             listener.local_addr()?,
             config.backend_addr(),
-            config.minecraft_protocol
+            config.minecraft_protocol,
+            if config.connections_per_minute == 0 {
+                "unlimited".to_string()
+            } else {
+                config.connections_per_minute.to_string()
+            }
         );
         Ok(Self {
             listener,
+            rate_limit: RateLimit::new(config.connections_per_minute),
+            stats: Stats::new(Duration::from_secs(config.diagnostics_interval_secs)),
             config,
             connections: Vec::new(),
         })
@@ -413,14 +559,27 @@ impl Runtime {
     }
     /// One bounded scheduler invocation. All sockets retain partial I/O state.
     pub fn poll(&mut self) {
+        let now = Instant::now();
         match self.listener.accept() {
-            Ok((client, _)) if self.connections.len() < self.config.max_connections => {
-                match Connection::new(client) {
-                    Ok(connection) => self.connections.push(connection),
-                    Err(e) => warn!("connection setup failed: {e}"),
+            Ok((_client, peer)) if self.connections.len() >= self.config.max_connections => {
+                self.stats.refused += 1;
+                debug!("refused connection from {peer}: max_connections reached");
+            }
+            Ok((client, peer)) => {
+                if !self.rate_limit.allow(peer.ip(), now) {
+                    self.stats.rate_limited += 1;
+                    debug!("rate-limited connection from {peer}");
+                } else {
+                    match Connection::new(client, peer) {
+                        Ok(connection) => {
+                            self.stats.accepted += 1;
+                            debug!("accepted connection from {peer}");
+                            self.connections.push(connection);
+                        }
+                        Err(e) => warn!("connection setup from {peer} failed: {e}"),
+                    }
                 }
             }
-            Ok(_) => {}
             Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) => {}
             Err(e) => warn!("accept failed: {e}"),
         }
@@ -429,20 +588,34 @@ impl Runtime {
             .iter()
             .filter(|c| c.session.is_playing())
             .count();
+        let cfg = &self.config;
+        let stats = &mut self.stats;
         self.connections
-            .retain_mut(|connection| match connection.step(&self.config, online) {
-                Ok(alive) => alive,
+            .retain_mut(|connection| match connection.step(cfg, online, stats) {
+                Ok(alive) => {
+                    if !alive {
+                        stats.closed += 1;
+                        debug!("connection {} closed", connection.peer);
+                    }
+                    alive
+                }
                 Err(e) => {
-                    warn!("connection closed: {e}");
+                    stats.closed += 1;
+                    warn!("connection {} closed: {e}", connection.peer);
                     false
                 }
             });
+        let active = self.connections.len();
+        self.stats.peak_connections = self.stats.peak_connections.max(active);
+        self.stats.peak_playing = self.stats.peak_playing.max(online);
+        self.stats.report(active, online);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::Ipv4Addr;
     #[test]
     fn send_queue_preserves_partial_writes_and_appended_bytes() {
         struct ShortWriter {
@@ -483,5 +656,41 @@ mod tests {
         queue.flush(&mut writer).unwrap();
         assert_eq!(writer.output, b"first message followed by second");
         assert_eq!(queue.len(), 0);
+    }
+
+    #[test]
+    fn rate_limit_counts_per_address_and_refills_after_the_window() {
+        let start = Instant::now();
+        let mut limit = RateLimit::new(2);
+        let a: IpAddr = "127.0.0.1".parse().unwrap();
+        let b: IpAddr = "127.0.0.2".parse().unwrap();
+        assert!(limit.allow(a, start));
+        assert!(limit.allow(a, start + Duration::from_secs(1)));
+        assert!(!limit.allow(a, start + Duration::from_secs(2)));
+        assert!(limit.allow(b, start + Duration::from_secs(2)));
+        assert!(limit.allow(a, start + Duration::from_secs(61)));
+        assert!(limit.allow(a, start + Duration::from_secs(61)));
+        assert!(!limit.allow(a, start + Duration::from_secs(61)));
+    }
+
+    #[test]
+    fn zero_rate_limit_disables_tracking() {
+        let now = Instant::now();
+        let mut limit = RateLimit::new(0);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        for _ in 0..1000 {
+            assert!(limit.allow(ip, now));
+        }
+        assert!(limit.clients.is_empty());
+    }
+
+    #[test]
+    fn tracked_address_map_stays_bounded() {
+        let now = Instant::now();
+        let mut limit = RateLimit::new(1);
+        for seed in 0..=MAX_TRACKED_ADDRESSES as u32 {
+            assert!(limit.allow(IpAddr::from(Ipv4Addr::from(seed)), now));
+        }
+        assert!(limit.clients.len() <= MAX_TRACKED_ADDRESSES);
     }
 }

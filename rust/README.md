@@ -67,11 +67,26 @@ be a numeric loopback address. Restart/reload the plugin after changing config.
 `server_address` is the Minecraft handshake hostname injected for Eagler clients;
 Gaius sends its own Minecraft handshake unchanged.
 
+`connections_per_minute` (default `30`, `0` disables) limits new connections per
+source address over a rolling minute. `max_connections` remains the global cap;
+connections above either limit are accepted and closed immediately. Tune both
+for public deployments and load tests.
+
 For the tested Gaius HTML, use an offline profile, then Multiplayer -> Direct
 Connect -> **127.0.0.1:25565**. Gaius automatically tries
 `ws://127.0.0.1:8081/tunnel`. Its `directPluginPort` URL option can select a
 custom gateway port. Enter the Minecraft backend port in Gaius, not port 8081.
 For Eaglercraft, use **ws://127.0.0.1:8081/** with a protocol 777 client.
+
+## Diagnostics
+
+Every `diagnostics_interval_secs` (default `60`, `0` disables) the gateway logs
+one `Eagler gateway:` line with active and playing counts, lifetime peaks,
+accepted/closed/refused/rate-limited totals, and throughput since the previous
+report. Rejected connections and failed sessions also log the peer address at
+debug/warn level. The counters are cumulative and reset only on plugin reload;
+use the periodic throughput figures for sustained-load measurements rather than
+wall-clock timers in the client.
 
 ## Development and verification
 
@@ -102,15 +117,18 @@ streaming, returned chat and a keepalive round trip through the WASM plugin.
 Each received 32 registries and 118 chunks (approximately 7.7 MB of Minecraft
 packet bodies). Unit coverage includes partial TCP reads/writes, incremental
 WebSocket fragmentation, 64 KiB+ frames, HTTP upgrades, compression transitions,
-malformed lengths and Eagler login ordering. This is not a throughput benchmark.
+malformed lengths, Eagler login ordering and per-address rate limiting. This is
+not a throughput benchmark.
 
 ## Remaining port work
 
-26.3 is the current target. Older Minecraft clients require a translation layer;
-Pumpkin's version enum alone does not provide that. Skin caching/custom skins,
-password authentication, notifications, pause menu extensions, EaglerWeb,
-rewind and full Java feature parity remain outside this working first release.
-The gateway does not advertise optional Eagler v5 capabilities it cannot provide.
+26.3 is the current target. Eaglercraft uses offline accounts, so the offline
+username login is the intended model and no password/registration flow is
+planned. Older Minecraft clients require a translation layer; Pumpkin's version
+enum alone does not provide that. Skin caching/custom skins, adaptive packet
+batching, notifications, pause menu extensions, EaglerWeb, rewind and full Java
+feature parity remain outside this working first release. The gateway does not
+advertise optional Eagler v5 capabilities it cannot provide.
 
 Eaglercraft voice chat (IVMP) is intentionally out of scope. Voice chat will be
 handled by a separate plugin selected by the project owner.

@@ -196,7 +196,7 @@ impl Session {
                 }
                 let _server = r.ascii()?;
                 let len = r.byte()? as usize;
-                r.take(len)?; // no password auth offered
+                r.take(len)?; // offline accounts only; no password auth offered
                 if self.version >= 4 {
                     let cookie = r.byte()?;
                     let len = r.byte()? as usize;

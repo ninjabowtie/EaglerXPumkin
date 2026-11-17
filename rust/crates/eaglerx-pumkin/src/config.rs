@@ -15,6 +15,8 @@ pub struct Config {
     pub server_address: String,
     pub minecraft_protocol: u16,
     pub max_connections: usize,
+    pub connections_per_minute: u32,
+    pub diagnostics_interval_secs: u64,
     pub motd: String,
 }
 
@@ -28,6 +30,8 @@ impl Default for Config {
             server_address: "localhost".into(),
             minecraft_protocol: 777, // Minecraft 26.3
             max_connections: 64,
+            connections_per_minute: 30,
+            diagnostics_interval_secs: 60,
             motd: "EaglerXPumkin\nMinecraft 26.3".into(),
         }
     }
@@ -69,6 +73,16 @@ impl Config {
         if self.max_connections == 0 || self.max_connections > 256 {
             return Err("max_connections must be between 1 and 256".into());
         }
+        if self.connections_per_minute > 3600 {
+            return Err(
+                "connections_per_minute must be at most 3600 (0 disables the limit)".into(),
+            );
+        }
+        if self.diagnostics_interval_secs > 3600 {
+            return Err(
+                "diagnostics_interval_secs must be at most 3600 (0 disables reports)".into(),
+            );
+        }
         if self.server_address.is_empty() || self.server_address.len() > 255 {
             return Err("server_address must contain 1..255 bytes".into());
         }
@@ -80,5 +94,46 @@ impl Config {
     }
     pub fn backend_addr(&self) -> SocketAddr {
         SocketAddr::new(self.backend_address, self.backend_port)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn partial_config_keeps_new_defaults() {
+        let config: Config = toml::from_str("listen_port = 9000\nmax_connections = 8").unwrap();
+        assert_eq!(config.listen_port, 9000);
+        assert_eq!(config.max_connections, 8);
+        assert_eq!(config.connections_per_minute, 30);
+        assert_eq!(config.diagnostics_interval_secs, 60);
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn zero_rate_limit_and_report_interval_disable_them() {
+        let config = Config {
+            connections_per_minute: 0,
+            diagnostics_interval_secs: 0,
+            ..Config::default()
+        };
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_out_of_range_diagnostics_settings() {
+        for config in [
+            Config {
+                connections_per_minute: 3601,
+                ..Config::default()
+            },
+            Config {
+                diagnostics_interval_secs: 3601,
+                ..Config::default()
+            },
+        ] {
+            assert!(config.validate().is_err());
+        }
     }
 }

@@ -79,7 +79,19 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   registry answering injected `GetOtherSkin`/`GetOtherCape`/`GetOtherTextures`
   requests. URL skin lookups are explicitly disabled instead of fetched, and the
   registry is bounded to online players so no persistent store is needed.
-- [ ] Adaptive packet batching (the original three-mode batcher).
+- [x] Adaptive packet batching (the original three-mode batcher). The
+  applicable behaviour is already provided by the shared send-queue
+  architecture: all frames queued during one poll are written back to back in
+  as few nonblocking writes as the socket accepts, which is the same
+  single-flush coalescing the Java batcher achieves. The timer modes (idle
+  passthrough, 2 ms burst buffering, 200 ms forced flush) have no equivalent
+  in the poll-driven runtime and no packet is held past the poll in which it
+  was read. The reference keeps one packet body per binary WebSocket frame
+  (see WebSocketEaglerFrameCodec: each buffered packet is written individually
+  and wrapped 1:1), so the wire format is unchanged; merging several packet
+  bodies into one frame would deviate from the reference and the live probe
+  and needs a graphical Eagler client to validate before it could be
+  considered.
 - [x] Static pause-menu external link and join notification, advertised only
   when configured and supported by the client.
 - [ ] Backend-driven notifications and message channels, including custom badge

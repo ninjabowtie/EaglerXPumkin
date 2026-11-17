@@ -173,11 +173,13 @@ benchmark.
 26.3 is the current target. Eaglercraft uses offline accounts, so the offline
 username login is the intended model and no password/registration flow is
 planned. Older Minecraft clients require a translation layer; Pumpkin's version
-enum alone does not provide that. Adaptive packet batching, dynamic
-backend-driven notifications, message channels, EaglerWeb, rewind and full Java
-feature parity remain outside this working first release. V5 skins are
-implemented in memory for connected players; there is no persistent skin cache
-or URL skin fetching. Static pause-menu links and join notifications are
+enum alone does not provide that. The adaptive packet batcher's single-flush
+coalescing is inherent in the poll-driven send queue, and the wire format keeps
+one packet body per frame as in the reference. Dynamic backend-driven
+notifications, message channels, EaglerWeb, rewind and full Java feature parity
+remain outside this working first release. V5 skins
+are implemented in memory for connected players; there is no persistent skin
+cache or URL skin fetching. Static pause-menu links and join notifications are
 available when configured. The gateway does not advertise optional Eagler v5
 capabilities it cannot provide.
 

@@ -55,9 +55,9 @@ Each release includes `EaglerXPumkin.wasm`, a zip with setup instructions,
 license and example configuration, and `SHA256SUMS`. Beta and alpha releases
 are marked as prereleases; stable releases are marked as latest.
 
-The selected version is embedded in the plugin during the build. The workflow
-creates a tag for the selected main commit without committing version bumps
-back to `main`. Existing tags are never overwritten. If publishing fails after
-creating a draft, its uploaded assets remain in that draft for inspection;
-remove the incomplete draft/tag before retrying the same version.
+The selected version is embedded in the plugin during the build. Stable
+releases commit and push a `chore(release): vX.Y.Z` version bump, then tag that
+commit. Beta and alpha releases tag the already-built commit and never write to
+`main`. Existing tags and releases are never overwritten, and a failed publish
+removes the tag it created.
 Releases only run manually; pushing commits does not publish one.

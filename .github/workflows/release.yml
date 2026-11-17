@@ -17,13 +17,22 @@ on:
           - stable
           - beta
           - alpha
+      allow_version_downgrade:
+        description: 'Allow a core version lower than the one in rust/Cargo.toml'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# One release at a time: tags, version bumps and the release itself must not race.
 concurrency:
-  group: manual-release-${{ inputs.version }}-${{ inputs.channel }}
+  group: manual-release
   cancel-in-progress: false
+
+env:
+  RUST_TOOLCHAIN: '1.100.0'
 
 jobs:
   build:
@@ -34,44 +43,111 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       channel: ${{ steps.version.outputs.channel }}
+      tree: ${{ steps.stamp.outputs.tree }}
     steps:
       - name: Check out selected commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Require main branch
         env:
           RELEASE_REF: ${{ github.ref }}
-        run: test "$RELEASE_REF" = refs/heads/main
+        run: |
+          if [ "$RELEASE_REF" != refs/heads/main ]; then
+            echo "::error::Releases must be dispatched from main (got $RELEASE_REF)."
+            exit 1
+          fi
 
       - name: Test release input handling
         run: python3 -m unittest discover -s rust/tests -p 'test_release.py' -v
 
-      - name: Validate version and stamp build metadata
+      - name: Validate release version
         id: version
+        env:
+          RELEASE_INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_INPUT_CHANNEL: ${{ inputs.channel }}
+          ALLOW_VERSION_DOWNGRADE: ${{ inputs.allow_version_downgrade }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          import os
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location(
+              'prepare_release', Path('rust/scripts/prepare_release.py'))
+          release = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(release)
+
+          current = tomllib.loads(Path('rust/Cargo.toml').read_text())['workspace']['package']['version']
+          try:
+              version = release.release_version(
+                  os.environ['RELEASE_INPUT_VERSION'], os.environ['RELEASE_INPUT_CHANNEL'])
+          except ValueError as error:
+              print(f'::error::{error}')
+              sys.exit(1)
+
+          def core(text):
+              return tuple(int(part) for part in text.split('-', 1)[0].split('.'))
+
+          if core(version) < core(current) and os.environ.get('ALLOW_VERSION_DOWNGRADE') != 'true':
+              print(f'::error::Refusing to release {version}: rust/Cargo.toml is already at {current}. '
+                    'Enable allow_version_downgrade to override.')
+              sys.exit(1)
+
+          tag = f'v{version}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"version={version}\ntag={tag}\nchannel={os.environ['RELEASE_INPUT_CHANNEL']}\n")
+          print(f'Prepared {tag} ({os.environ["RELEASE_INPUT_CHANNEL"]}), workspace version {current}')
+          PY
+
+      - name: Reject an existing tag or release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          exists() {
+            local path=$1 output
+            if output=$(gh api "$path" 2>&1); then
+              return 0
+            fi
+            if [[ "$output" == *'HTTP 404'* ]]; then
+              return 1
+            fi
+            echo "::error::GitHub API request failed for $path: $output" >&2
+            exit 1
+          }
+          if exists "repos/$GH_REPO/releases/tags/$RELEASE_TAG"; then
+            echo "::error::A release for $RELEASE_TAG already exists. Choose a new version."
+            exit 1
+          fi
+          if exists "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG"; then
+            echo "::error::Tag $RELEASE_TAG already exists. Delete it or choose a new version."
+            exit 1
+          fi
+
+      - name: Stamp build metadata
+        id: stamp
         env:
           RELEASE_INPUT_VERSION: ${{ inputs.version }}
           RELEASE_INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
           python3 rust/scripts/prepare_release.py \
             --version "$RELEASE_INPUT_VERSION" --channel "$RELEASE_INPUT_CHANNEL"
-
-      - name: Reject an existing release tag
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
-            echo "::error::Tag $RELEASE_TAG already exists. Choose a new version."
-            exit 1
-          fi
+          # The stable publish job commits these two files and verifies the tree hash.
+          git add -- rust/Cargo.toml rust/Cargo.lock
+          printf 'tree=%s\n' "$(git write-tree)" >> "$GITHUB_OUTPUT"
 
       - name: Install tested Rust toolchain
         run: |
-          rustup toolchain install 1.100.0 --profile minimal \
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal \
             --component rustfmt --component clippy --target wasm32-wasip2
-          rustup default 1.100.0
+          rustup default "$RUST_TOOLCHAIN"
 
       - name: Check formatting and run unit tests
         working-directory: rust
@@ -126,7 +202,7 @@ jobs:
     name: Publish GitHub release
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
     env:
@@ -135,8 +211,42 @@ jobs:
       RELEASE_VERSION: ${{ needs.build.outputs.version }}
       RELEASE_TAG: ${{ needs.build.outputs.tag }}
       RELEASE_CHANNEL: ${{ needs.build.outputs.channel }}
+      EXPECTED_TREE: ${{ needs.build.outputs.tree }}
       SOURCE_SHA: ${{ github.sha }}
     steps:
+      - name: Reject an existing tag or release
+        run: |
+          set -euo pipefail
+          exists() {
+            local path=$1 output
+            if output=$(gh api "$path" 2>&1); then
+              return 0
+            fi
+            if [[ "$output" == *'HTTP 404'* ]]; then
+              return 1
+            fi
+            echo "::error::GitHub API request failed for $path: $output" >&2
+            exit 1
+          }
+          if exists "repos/$GH_REPO/releases/tags/$RELEASE_TAG"; then
+            echo "::error::A release for $RELEASE_TAG already exists. Choose a new version."
+            exit 1
+          fi
+          if exists "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG"; then
+            echo "::error::Tag $RELEASE_TAG already exists. Delete it or choose a new version."
+            exit 1
+          fi
+
+      # Only a manually requested stable release writes to main. Beta and alpha
+      # releases tag the already-built commit and never push to main.
+      # Checkout runs before downloading so its workspace clean cannot remove dist/.
+      - name: Check out release source
+        if: needs.build.outputs.channel == 'stable'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
       - name: Download checked release assets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -147,23 +257,78 @@ jobs:
         working-directory: dist
         run: sha256sum --check SHA256SUMS
 
-      - name: Create draft with assets, then publish
+      - name: Commit stable version bump
+        if: needs.build.outputs.channel == 'stable'
+        env:
+          RELEASE_INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 rust/scripts/prepare_release.py \
+            --version "$RELEASE_INPUT_VERSION" --channel stable
+          git add -- rust/Cargo.toml rust/Cargo.lock
+          actual_tree=$(git write-tree)
+          if [ -z "$EXPECTED_TREE" ] || [ "$actual_tree" != "$EXPECTED_TREE" ]; then
+            echo "::error::Stamped source tree $actual_tree does not match the built tree $EXPECTED_TREE."
+            exit 1
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): $RELEASE_TAG"
+          fi
+          if ! git push origin HEAD:main; then
+            echo "::error::main changed while the release was building. Re-run the workflow for $RELEASE_TAG."
+            exit 1
+          fi
+          echo "Release commit: $(git rev-parse HEAD)"
+
+      - name: Create tag and publish release
         shell: bash
         run: |
+          set -euo pipefail
+
+          if [ "$RELEASE_CHANNEL" = stable ]; then
+            release_sha=$(git rev-parse HEAD)
+          else
+            release_sha=$SOURCE_SHA
+          fi
+
+          created_tag=false
+          finish() {
+            local status=$?
+            if [ "$status" -ne 0 ] && [ "$created_tag" = true ]; then
+              echo "::error::Publishing failed; removing tag $RELEASE_TAG" >&2
+              gh release delete "$RELEASE_TAG" --yes --cleanup-tag >/dev/null 2>&1 || true
+              gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG" >/dev/null 2>&1 || true
+            fi
+            exit "$status"
+          }
+          trap finish EXIT
+
+          # Create the tag at the exact commit that was built, so the release can
+          # never point somewhere else (e.g. the latest default-branch commit).
+          gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$release_sha" --silent
+          created_tag=true
+
           printf '%s\n\n%s\n\n%s\n' \
             "Pumpkin 26.3 WebSocket gateway — $RELEASE_CHANNEL release." \
             'Install EaglerXPumkin.wasm in your Pumpkin plugins/ folder. The zip includes setup instructions and example configuration.' \
-            "Built from $SOURCE_SHA with Rust 1.100.0 for wasm32-wasip2." > release-notes.md
-          flags=()
-          latest=true
-          if [[ "$RELEASE_CHANNEL" != stable ]]; then
-            flags+=(--prerelease)
-            latest=false
+            "Built from $release_sha with Rust $RUST_TOOLCHAIN for wasm32-wasip2." > release-notes.md
+
+          assets=(
+            dist/EaglerXPumkin.wasm
+            "dist/EaglerXPumkin-$RELEASE_VERSION.zip"
+            dist/SHA256SUMS
+          )
+          flags=(--verify-tag --title "EaglerXPumkin $RELEASE_VERSION" --notes-file release-notes.md)
+          if [ "$RELEASE_CHANNEL" = stable ]; then
+            flags+=(--latest)
+          else
+            flags+=(--prerelease --latest=false)
           fi
-          gh release create "$RELEASE_TAG" \
-            dist/EaglerXPumkin.wasm "dist/EaglerXPumkin-$RELEASE_VERSION.zip" dist/SHA256SUMS \
-            --target "$SOURCE_SHA" --title "EaglerXPumkin $RELEASE_VERSION" \
-            --notes-file release-notes.md --draft "${flags[@]}"
-          gh release edit "$RELEASE_TAG" --draft=false --latest="$latest"
-          printf '### Released [%s](%s/releases/tag/%s)\n' \
-            "$RELEASE_TAG" "$GITHUB_SERVER_URL/$GH_REPO" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          gh release create "$RELEASE_TAG" "${assets[@]}" "${flags[@]}"
+
+          trap - EXIT
+          printf '### Released [%s](%s/%s/releases/tag/%s)\n' \
+            "$RELEASE_TAG" "$GITHUB_SERVER_URL" "$GH_REPO" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

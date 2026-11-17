@@ -1,9 +1,3 @@
-.gradle
-.settings
-.classpath
-.project
-build
-bin
 /rust/target/
 /rust/dist/
 /rust/eagler.toml

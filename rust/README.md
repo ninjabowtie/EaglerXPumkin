@@ -1,8 +1,8 @@
 # Pumpkin 26.3 gateway
 
 A runnable WASI Preview 2 plugin for stock Pumpkin, plus a native development
-CLI using the same networking state machine. The original Java implementation
-stays in the repository as the reference for further porting.
+CLI using the same networking state machine. Legacy Java reference code is
+available in Git history and in upstream EaglerXServer.
 
 ## Verified compatibility
 
@@ -62,7 +62,7 @@ account verification. The example binds the backend to loopback so browsers
 enter through the gateway. Use TLS termination for public HTTPS-hosted clients.
 
 The plugin defaults to `0.0.0.0:8081` -> `127.0.0.1:25565`.
-See `eagler.example.toml` for all settings. Ports must differ; the backend must
+See [eagler.example.toml](eagler.example.toml) for all settings. Ports must differ; the backend must
 be a numeric loopback address. Restart/reload the plugin after changing config.
 `server_address` is the Minecraft handshake hostname injected for Eagler clients;
 Gaius sends its own Minecraft handshake unchanged.

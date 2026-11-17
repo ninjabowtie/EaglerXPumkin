@@ -4,6 +4,7 @@
 use crate::{
     config::Config,
     minecraft::{self as mc, Codec, Reader, Result},
+    skins::{self, PlayerSkin, SkinStore},
 };
 use eagler_ws::{Message, OP_BIN, OP_TEXT};
 use md5::{Digest, Md5};
@@ -27,6 +28,7 @@ pub struct Session {
     codec: Codec,
     profiles: HashSet<String>,
     profile_bytes: usize,
+    player_skin: PlayerSkin,
     stalled: Vec<Vec<u8>>,
     stalled_bytes: usize,
     pub client_output: Vec<Message>,
@@ -46,6 +48,7 @@ impl Default for Session {
             codec: Codec::default(),
             profiles: HashSet::new(),
             profile_bytes: 0,
+            player_skin: PlayerSkin::default(),
             stalled: Vec::new(),
             stalled_bytes: 0,
             client_output: Vec::new(),
@@ -70,6 +73,9 @@ impl Session {
     }
     pub fn is_playing(&self) -> bool {
         self.stage == Stage::Play
+    }
+    pub fn uuid(&self) -> [u8; 16] {
+        self.uuid
     }
     pub fn fail(&mut self, reason: &str) {
         if self.closing {
@@ -101,7 +107,13 @@ impl Session {
         self.closing = true;
     }
 
-    pub fn client_message(&mut self, message: Message, cfg: &Config, online: usize) -> Result<()> {
+    pub fn client_message(
+        &mut self,
+        message: Message,
+        cfg: &Config,
+        online: usize,
+        store: &mut SkinStore,
+    ) -> Result<()> {
         if self.closing {
             return Ok(());
         }
@@ -127,6 +139,9 @@ impl Session {
             return Err("expected binary Eagler packet".into());
         }
         if self.stage == Stage::Play {
+            if self.version >= 5 && message.payload.first() == Some(&skins::INJECTED_PACKET) {
+                return self.injected_message(&message.payload, store);
+            }
             return self.send_backend(&message.payload);
         }
         let mut r = Reader::new(&message.payload);
@@ -247,20 +262,25 @@ impl Session {
                 for _ in 0..count {
                     let name = r.ascii()?;
                     let len = r.short()? as usize;
-                    r.take(len)?;
+                    let value = r.take(len)?;
                     self.profile_bytes += len;
                     if self.profiles.len() >= 16 || self.profile_bytes > 65536 {
                         return Err("excessive profile data".into());
                     }
-                    if !self.profiles.insert(name) {
+                    if !self.profiles.insert(name.clone()) {
                         return Err("duplicate profile data".into());
                     }
+                    self.player_skin.apply_profile(&name, value);
                 }
                 r.end()?;
             }
             (Stage::Profiles, 8) => {
                 r.end()?;
+                store.register(self.uuid, self.player_skin.clone());
                 self.send(vec![9]);
+                if self.version >= 5 {
+                    self.send(skins::disable_skin_url_lookup());
+                }
                 self.stage = Stage::Play;
                 for packet in std::mem::take(&mut self.stalled) {
                     self.send(packet);
@@ -274,6 +294,54 @@ impl Session {
 
     fn send_backend(&mut self, packet: &[u8]) -> Result<()> {
         self.backend_output.extend(self.codec.encode(packet)?);
+        Ok(())
+    }
+
+    /// Handle a V5 `0xEE` injected game message, either a single packet or a
+    /// `0xFF` multi-packet batch. Messages this gateway does not implement
+    /// (voice, webview, URL lookups) are dropped rather than forwarded, since
+    /// the Pumpkin backend would not understand them.
+    fn injected_message(&mut self, payload: &[u8], store: &mut SkinStore) -> Result<()> {
+        if payload.len() > 65536 {
+            return Err("injected message too large".into());
+        }
+        let body = &payload[1..];
+        if body.first() == Some(&0xFF) {
+            let mut r = Reader::new(&body[1..]);
+            let count = r.int()?;
+            if !(0..=16).contains(&count) {
+                return Err("invalid injected packet count".into());
+            }
+            for _ in 0..count {
+                let len = r.int()?;
+                if len < 0 {
+                    return Err("invalid injected packet length".into());
+                }
+                let packet = r.take(len as usize)?;
+                self.injected_packet(packet, store)?;
+            }
+            r.end()?;
+        } else {
+            self.injected_packet(body, store)?;
+        }
+        Ok(())
+    }
+
+    fn injected_packet(&mut self, packet: &[u8], store: &mut SkinStore) -> Result<()> {
+        let mut r = Reader::new(packet);
+        let id = r.int()?;
+        if !(0x01..=0x03).contains(&id) {
+            return Ok(()); // unsupported injected message: drop it
+        }
+        let request_id = r.int()?;
+        let uuid: [u8; 16] = r.take(16)?.try_into().unwrap();
+        r.end()?;
+        let response = match id {
+            0x01 => store.skin_response(&uuid, request_id),
+            0x02 => store.cape_response(&uuid, request_id),
+            _ => store.textures_response(&uuid, request_id),
+        };
+        self.send(skins::injected(response));
         Ok(())
     }
 
@@ -309,6 +377,7 @@ impl Session {
                             return Err("invalid backend username".into());
                         }
                         self.username = username;
+                        self.player_skin = PlayerSkin::fallback(&self.uuid);
                         if self.protocol >= 764 {
                             self.send_backend(&[3])?;
                         } // login acknowledged
@@ -360,7 +429,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn client(session: &mut Session, cfg: &Config, bytes: &[u8]) {
+    fn client(session: &mut Session, cfg: &Config, store: &mut SkinStore, bytes: &[u8]) {
         session
             .client_message(
                 Message {
@@ -369,15 +438,18 @@ mod tests {
                 },
                 cfg,
                 0,
+                store,
             )
             .unwrap();
     }
-    fn start() -> (Session, Config) {
+    fn start() -> (Session, Config, SkinStore) {
         let cfg = Config::default();
         let mut session = Session::default();
+        let mut store = SkinStore::default();
         client(
             &mut session,
             &cfg,
+            &mut store,
             b"\x01\x02\x00\x01\x00\x05\x00\x01\x03\x09\x04Test\x01x\x00\x00",
         );
         assert_eq!(
@@ -387,13 +459,14 @@ mod tests {
         client(
             &mut session,
             &cfg,
+            &mut store,
             b"\x04\x04Test\x07default\x00\x00\x00\x00\x00",
         );
-        (session, cfg)
+        (session, cfg, store)
     }
     #[test]
     fn backend_login_waits_for_client_finish_before_replaying_configuration() {
-        let (mut session, cfg) = start();
+        let (mut session, cfg, mut store) = start();
         assert!(session.connect_requested);
         let mut backend = Codec::default();
         backend
@@ -417,29 +490,45 @@ mod tests {
         assert_eq!(allow[0], 5);
         assert_eq!(&allow[6..22], &[1; 16]); // backend UUID wins
         assert!(session.client_output.is_empty());
-        client(&mut session, &cfg, b"\x07\x01\x05brand\x00\x01x");
-        client(&mut session, &cfg, &[8]);
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            b"\x07\x01\x05brand\x00\x01x",
+        );
+        client(&mut session, &cfg, &mut store, &[8]);
         assert_eq!(session.client_output[0].payload, [9]);
-        assert_eq!(session.client_output[1].payload, [15, 0]);
+        assert_eq!(
+            session.client_output[1].payload,
+            skins::disable_skin_url_lookup()
+        );
+        assert_eq!(session.client_output[2].payload, [15, 0]);
         assert!(session.is_playing());
         session.backend_output.clear();
-        client(&mut session, &cfg, &[3]); // finish config remains a Minecraft packet
+        client(&mut session, &cfg, &mut store, &[3]); // finish config remains a Minecraft packet
         assert_eq!(session.backend_output, [1, 3]);
     }
     #[test]
     fn version_mismatch_and_duplicate_profiles_are_rejected() {
         let cfg = Config::default();
+        let mut store = SkinStore::default();
         let mut old = Session::default();
         client(
             &mut old,
             &cfg,
+            &mut store,
             b"\x01\x02\x00\x01\x00\x05\x00\x01\x01\x54\x01x\x01x\x00\x00",
         );
         assert!(old.closing);
         assert_eq!(old.client_output[0].payload[0], 3);
-        let (mut session, cfg) = start();
+        let (mut session, cfg, mut store) = start();
         session.stage = Stage::Profiles;
-        client(&mut session, &cfg, b"\x07\x01\x05brand\x00\x01x");
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            b"\x07\x01\x05brand\x00\x01x",
+        );
         assert!(
             session
                 .client_message(
@@ -448,9 +537,89 @@ mod tests {
                         payload: b"\x07\x01\x05brand\x00\x01x".to_vec()
                     },
                     &cfg,
-                    0
+                    0,
+                    &mut store,
                 )
                 .is_err()
         );
+    }
+    #[test]
+    fn registers_profile_textures_and_answers_injected_requests() {
+        let (mut session, cfg, mut store) = start();
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        let mut success = vec![2];
+        success.extend_from_slice(&[7; 16]);
+        mc::string(&mut success, "Test");
+        success.push(0);
+        success.extend_from_slice(&[2; 16]);
+        session
+            .backend_bytes(&backend.encode(&success).unwrap())
+            .unwrap();
+        session.client_output.clear(); // allow login
+
+        let mut profile = vec![7, 2];
+        profile.push(7);
+        profile.extend_from_slice(b"skin_v2");
+        profile.extend_from_slice(&5u16.to_be_bytes());
+        profile.extend_from_slice(&[1, 0, 0, 0, 4]);
+        // cape_v1 preset 2
+        profile.push(7);
+        profile.extend_from_slice(b"cape_v1");
+        profile.extend_from_slice(&5u16.to_be_bytes());
+        profile.extend_from_slice(&[1, 0, 0, 0, 2]);
+        client(&mut session, &cfg, &mut store, &profile);
+        client(&mut session, &cfg, &mut store, &[8]);
+        assert!(session.is_playing());
+        session.client_output.clear();
+        let uuid = [7u8; 16];
+        let skin = store.get(&uuid).unwrap();
+        assert_eq!(skin.skin, skins::Skin::Preset(4));
+        assert_eq!(skin.cape, skins::Cape::Preset(2));
+
+        // Single injected textures request: id 0x03, request 9, UUID.
+        let mut request = vec![skins::INJECTED_PACKET, 3, 9];
+        request.extend_from_slice(&uuid);
+        client(&mut session, &cfg, &mut store, &request);
+        let reply = session.client_output.pop().unwrap().payload;
+        assert_eq!(reply, skins::injected(vec![5, 9, 4, 2]));
+        session.client_output.clear();
+
+        // Multi-packet batch: skin and cape requests in one message.
+        let mut skin_request = vec![1, 11];
+        skin_request.extend_from_slice(&uuid);
+        let mut cape_request = vec![2, 12];
+        cape_request.extend_from_slice(&uuid);
+        let mut batch = vec![skins::INJECTED_PACKET, 0xFF, 2];
+        batch.push(skin_request.len() as u8);
+        batch.extend_from_slice(&skin_request);
+        batch.push(cape_request.len() as u8);
+        batch.extend_from_slice(&cape_request);
+        client(&mut session, &cfg, &mut store, &batch);
+        let payloads: Vec<Vec<u8>> = session
+            .client_output
+            .drain(..)
+            .map(|message| message.payload)
+            .collect();
+        assert_eq!(
+            payloads,
+            [
+                skins::injected(vec![1, 11, 4]),
+                skins::injected(vec![3, 12, 2])
+            ]
+        );
+
+        // Unsupported injected messages are dropped, not forwarded backend.
+        session.backend_output.clear();
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            &[skins::INJECTED_PACKET, 4, 1, 1, b'x'],
+        );
+        assert!(session.backend_output.is_empty());
+        assert!(session.client_output.is_empty());
     }
 }

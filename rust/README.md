@@ -88,6 +88,21 @@ debug/warn level. The counters are cumulative and reset only on plugin reload;
 use the periodic throughput figures for sustained-load measurements rather than
 wall-clock timers in the client.
 
+## Skins
+
+Eagler v5 players send `skin_v1`/`skin_v2`/`cape_v1` profile data during login.
+The gateway decodes presets and custom 64x64 textures into a bounded in-memory
+registry keyed by the player's UUID. Requests for a player with no profile data
+receive the same deterministic Steve/Alex fallback as EaglerXServer. Injected
+`GetOtherSkin` (0x01), `GetOtherCape` (0x02) and `GetOtherTextures` (0x03)
+messages, including `0xFF` multi-packet batches, are answered locally and are
+never forwarded to Pumpkin. The gateway also sends a V5 client-state flag that
+disables URL skin lookups, because it does not fetch remote images. Voice,
+webview and server-info injected messages are dropped for the same reason.
+
+Entries are removed when the last session for that UUID disconnects; skins are
+not persisted, since only connected players need textures.
+
 ## Development and verification
 
 For the native CLI, with Pumpkin already running and the WASM plugin disabled:
@@ -117,18 +132,20 @@ streaming, returned chat and a keepalive round trip through the WASM plugin.
 Each received 32 registries and 118 chunks (approximately 7.7 MB of Minecraft
 packet bodies). Unit coverage includes partial TCP reads/writes, incremental
 WebSocket fragmentation, 64 KiB+ frames, HTTP upgrades, compression transitions,
-malformed lengths, Eagler login ordering and per-address rate limiting. This is
-not a throughput benchmark.
+malformed lengths, Eagler login ordering, skin profile parsing and injected
+skin responses, and per-address rate limiting. This is not a throughput
+benchmark.
 
 ## Remaining port work
 
 26.3 is the current target. Eaglercraft uses offline accounts, so the offline
 username login is the intended model and no password/registration flow is
 planned. Older Minecraft clients require a translation layer; Pumpkin's version
-enum alone does not provide that. Skin caching/custom skins, adaptive packet
-batching, notifications, pause menu extensions, EaglerWeb, rewind and full Java
-feature parity remain outside this working first release. The gateway does not
-advertise optional Eagler v5 capabilities it cannot provide.
+enum alone does not provide that. Adaptive packet batching, notifications, pause
+menu extensions, EaglerWeb, rewind and full Java feature parity remain outside
+this working first release. V5 skins are implemented in memory for connected
+players; there is no persistent skin cache or URL skin fetching. The gateway
+does not advertise optional Eagler v5 capabilities it cannot provide.
 
 Eaglercraft voice chat (IVMP) is intentionally out of scope. Voice chat will be
 handled by a separate plugin selected by the project owner.

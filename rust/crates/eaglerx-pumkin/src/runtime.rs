@@ -1,5 +1,5 @@
 //! Shared nonblocking runtime. No guest threads or socket cloning are required.
-use crate::{config::Config, session::Session};
+use crate::{config::Config, session::Session, skins::SkinStore};
 use eagler_ws::{self as ws, Decoder, OP_BIN, OP_CLOSE, OP_PING, OP_PONG, OP_TEXT};
 use std::{
     collections::{HashMap, VecDeque},
@@ -274,7 +274,13 @@ impl Connection {
         }
         Ok(())
     }
-    fn client_bytes(&mut self, bytes: &[u8], cfg: &Config, online: usize) -> io::Result<()> {
+    fn client_bytes(
+        &mut self,
+        bytes: &[u8],
+        cfg: &Config,
+        online: usize,
+        skins: &mut SkinStore,
+    ) -> io::Result<()> {
         if self.mode == Mode::Raw {
             return self.backend_out.push(bytes);
         }
@@ -339,7 +345,7 @@ impl Connection {
                 }
                 _ if self.tunnel => self.tunnel_message(message, cfg)?,
                 _ => {
-                    if let Err(e) = self.session.client_message(message, cfg, online) {
+                    if let Err(e) = self.session.client_message(message, cfg, online, skins) {
                         self.session.fail(&e);
                     }
                     self.drain_session(cfg)?;
@@ -408,7 +414,13 @@ impl Connection {
         }
         Ok(())
     }
-    fn step(&mut self, cfg: &Config, online: usize, stats: &mut Stats) -> io::Result<bool> {
+    fn step(
+        &mut self,
+        cfg: &Config,
+        online: usize,
+        stats: &mut Stats,
+        skins: &mut SkinStore,
+    ) -> io::Result<bool> {
         if self.client_out.flush(&mut self.client)? {
             self.active = Instant::now();
         }
@@ -436,7 +448,7 @@ impl Connection {
                     self.active = Instant::now();
                     read += n;
                     stats.client_bytes += n as u64;
-                    self.client_bytes(&buffer[..n], cfg, online)?;
+                    self.client_bytes(&buffer[..n], cfg, online, skins)?;
                     if self.closing.is_some() {
                         break;
                     }
@@ -529,6 +541,7 @@ pub struct Runtime {
     connections: Vec<Connection>,
     rate_limit: RateLimit,
     stats: Stats,
+    skins: SkinStore,
 }
 impl Runtime {
     pub fn bind(config: Config) -> io::Result<Self> {
@@ -552,6 +565,7 @@ impl Runtime {
             stats: Stats::new(Duration::from_secs(config.diagnostics_interval_secs)),
             config,
             connections: Vec::new(),
+            skins: SkinStore::default(),
         })
     }
     pub fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
@@ -590,21 +604,42 @@ impl Runtime {
             .count();
         let cfg = &self.config;
         let stats = &mut self.stats;
-        self.connections
-            .retain_mut(|connection| match connection.step(cfg, online, stats) {
+        let skins = &mut self.skins;
+        let mut closed_players = Vec::new();
+        self.connections.retain_mut(|connection| {
+            match connection.step(cfg, online, stats, skins) {
                 Ok(alive) => {
                     if !alive {
                         stats.closed += 1;
+                        if connection.session.is_playing() {
+                            closed_players.push(connection.session.uuid());
+                        }
                         debug!("connection {} closed", connection.peer);
                     }
                     alive
                 }
                 Err(e) => {
                     stats.closed += 1;
+                    if connection.session.is_playing() {
+                        closed_players.push(connection.session.uuid());
+                    }
                     warn!("connection {} closed: {e}", connection.peer);
                     false
                 }
-            });
+            }
+        });
+        // Keep the texture registry scoped to online players. A UUID may still be
+        // present on another connection during a reconnect race, so only evict
+        // entries that no remaining playing session owns.
+        for uuid in closed_players {
+            if !self
+                .connections
+                .iter()
+                .any(|c| c.session.is_playing() && c.session.uuid() == uuid)
+            {
+                self.skins.remove(&uuid);
+            }
+        }
         let active = self.connections.len();
         self.stats.peak_connections = self.stats.peak_connections.max(active);
         self.stats.peak_playing = self.stats.peak_playing.max(online);

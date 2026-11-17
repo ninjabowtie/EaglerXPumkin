@@ -74,8 +74,11 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 
 ### Phase 2 — full Eagler protocol layer
 
-- [ ] Skin pipeline: profile skin packets, custom uploads and a binary skin
-  store (SQLite is unavailable in WASM).
+- [x] Skin pipeline: Eagler v5 `skin_v1`/`skin_v2`/`cape_v1` profile data,
+  custom 64x64 uploads, deterministic Steve/Alex fallback, and an in-memory
+  registry answering injected `GetOtherSkin`/`GetOtherCape`/`GetOtherTextures`
+  requests. URL skin lookups are explicitly disabled instead of fetched, and the
+  registry is bounded to online players so no persistent store is needed.
 - [ ] Adaptive packet batching (the original three-mode batcher).
 - [ ] Pause menu extensions, notifications and message channels.
 - [ ] MOTD animations.
@@ -112,7 +115,7 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   public deployments.
 - Add automated coverage for the untested paths above: golden captures, a
   scripted browser join, a vanilla-client regression and a multi-client soak.
-- Port optional Eagler features as needed: skins, notifications and pause menu
+- Port optional Eagler features as needed: notifications and pause menu
   extensions. Advertise capabilities only when their implementation is
   available.
 - Evaluate older Minecraft client support separately. Pumpkin's old version

@@ -114,6 +114,8 @@ class Client:
         assert allow[0] == 5, allow
         self.send(b"\x08")
         assert self.receive() == b"\x09"
+        flag = self.receive()
+        assert flag[:2] == b"\xee\x21", flag  # disable URL skin lookup
         return self.configure()
 
     def configure(self):

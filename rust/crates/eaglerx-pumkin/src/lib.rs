@@ -3,6 +3,7 @@ pub mod config;
 pub mod minecraft;
 pub mod runtime;
 mod session;
+mod skins;
 
 #[cfg(target_os = "wasi")]
 mod plugin {

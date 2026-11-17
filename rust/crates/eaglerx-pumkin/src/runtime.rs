@@ -1,5 +1,5 @@
 //! Shared nonblocking runtime. No guest threads or socket cloning are required.
-use crate::{config::Config, session::Session, skins::SkinStore};
+use crate::{config::Config, ip_filter::IpFilter, session::Session, skins::SkinStore};
 use eagler_ws::{self as ws, Decoder, OP_BIN, OP_CLOSE, OP_PING, OP_PONG, OP_TEXT};
 use std::{
     collections::{HashMap, VecDeque},
@@ -68,6 +68,7 @@ struct Stats {
     accepted: u64,
     closed: u64,
     refused: u64,
+    filtered: u64,
     rate_limited: u64,
     client_bytes: u64,
     backend_bytes: u64,
@@ -85,6 +86,7 @@ impl Stats {
             accepted: 0,
             closed: 0,
             refused: 0,
+            filtered: 0,
             rate_limited: 0,
             client_bytes: 0,
             backend_bytes: 0,
@@ -114,13 +116,14 @@ impl Stats {
         self.last_backend_bytes = self.backend_bytes;
         info!(
             "Eagler gateway: {active} active ({playing} playing, peaks {} / {}), \
-             {} accepted, {} closed, {} refused, {} rate-limited; \
+             {} accepted, {} closed, {} refused, {} filtered by IP policy, {} rate-limited; \
              {:.1} KiB/s client->backend, {:.1} KiB/s backend->client",
             self.peak_connections,
             self.peak_playing,
             self.accepted,
             self.closed,
             self.refused,
+            self.filtered,
             self.rate_limited,
             client_bytes as f64 / 1024.0 / seconds,
             backend_bytes as f64 / 1024.0 / seconds,
@@ -540,12 +543,15 @@ pub struct Runtime {
     config: Config,
     connections: Vec<Connection>,
     rate_limit: RateLimit,
+    ip_filter: IpFilter,
     stats: Stats,
     skins: SkinStore,
 }
 impl Runtime {
     pub fn bind(config: Config) -> io::Result<Self> {
         config.validate().map_err(io::Error::other)?;
+        let ip_filter = IpFilter::parse(&config.ip_allowlist, &config.ip_blocklist)
+            .map_err(io::Error::other)?;
         let listener = TcpListener::bind(config.listen_addr())?;
         listener.set_nonblocking(true)?;
         info!(
@@ -559,9 +565,22 @@ impl Runtime {
                 config.connections_per_minute.to_string()
             }
         );
+        if !config.ip_allowlist.is_empty() {
+            info!(
+                "IP allowlist active ({} entries); unmatched addresses are rejected",
+                config.ip_allowlist.len()
+            );
+        }
+        if !config.ip_blocklist.is_empty() {
+            info!(
+                "IP blocklist active ({} entries)",
+                config.ip_blocklist.len()
+            );
+        }
         Ok(Self {
             listener,
             rate_limit: RateLimit::new(config.connections_per_minute),
+            ip_filter,
             stats: Stats::new(Duration::from_secs(config.diagnostics_interval_secs)),
             config,
             connections: Vec::new(),
@@ -580,7 +599,10 @@ impl Runtime {
                 debug!("refused connection from {peer}: max_connections reached");
             }
             Ok((client, peer)) => {
-                if !self.rate_limit.allow(peer.ip(), now) {
+                if !self.ip_filter.allows(peer.ip()) {
+                    self.stats.filtered += 1;
+                    debug!("blocked connection from {peer} by IP policy");
+                } else if !self.rate_limit.allow(peer.ip(), now) {
                     self.stats.rate_limited += 1;
                     debug!("rate-limited connection from {peer}");
                 } else {

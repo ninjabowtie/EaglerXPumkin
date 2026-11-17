@@ -80,9 +80,15 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   requests. URL skin lookups are explicitly disabled instead of fetched, and the
   registry is bounded to online players so no persistent store is needed.
 - [ ] Adaptive packet batching (the original three-mode batcher).
-- [ ] Pause menu extensions, notifications and message channels.
+- [x] Static pause-menu external link and join notification, advertised only
+  when configured and supported by the client.
+- [ ] Backend-driven notifications and message channels, including custom badge
+  icons and per-event delivery.
 - [ ] MOTD animations.
-- [ ] IP filtering, whitelisting hooks and ban masks.
+- [x] IPv4/IPv6 allow and block lists with CIDR prefixes, evaluated before the
+  connection rate limiter.
+- [ ] Player whitelisting and UUID ban masks. Offline accounts make identity
+  policy a backend concern; only address policy is enforced at the gateway.
 - [ ] Voice chat (IVMP). Not planned for this plugin; a separate plugin will
   provide it.
 - [ ] Password/account registration. Not applicable: Eaglercraft uses offline

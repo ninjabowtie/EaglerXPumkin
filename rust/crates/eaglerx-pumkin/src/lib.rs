@@ -1,9 +1,11 @@
 //! Eaglercraft WebSocket gateway for Pumpkin, polled without guest threads.
 pub mod config;
+pub mod ip_filter;
 pub mod minecraft;
 pub mod runtime;
 mod session;
 mod skins;
+mod ui;
 
 #[cfg(target_os = "wasi")]
 mod plugin {

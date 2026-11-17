@@ -17,6 +17,15 @@ pub struct Config {
     pub max_connections: usize,
     pub connections_per_minute: u32,
     pub diagnostics_interval_secs: u64,
+    pub ip_allowlist: Vec<String>,
+    pub ip_blocklist: Vec<String>,
+    pub pause_menu_button: String,
+    pub pause_menu_url: String,
+    pub notification_title: String,
+    pub notification_body: String,
+    pub notification_source: String,
+    pub notification_hide_after_secs: u8,
+    pub notification_expire_after_secs: u16,
     pub motd: String,
 }
 
@@ -32,6 +41,15 @@ impl Default for Config {
             max_connections: 64,
             connections_per_minute: 30,
             diagnostics_interval_secs: 60,
+            ip_allowlist: Vec::new(),
+            ip_blocklist: Vec::new(),
+            pause_menu_button: String::new(),
+            pause_menu_url: String::new(),
+            notification_title: String::new(),
+            notification_body: String::new(),
+            notification_source: String::new(),
+            notification_hide_after_secs: 10,
+            notification_expire_after_secs: 3600,
             motd: "EaglerXPumkin\nMinecraft 26.3".into(),
         }
     }
@@ -83,6 +101,35 @@ impl Config {
                 "diagnostics_interval_secs must be at most 3600 (0 disables reports)".into(),
             );
         }
+        crate::ip_filter::IpFilter::parse(&self.ip_allowlist, &self.ip_blocklist)?;
+        if self.pause_menu_button.is_empty() != self.pause_menu_url.is_empty() {
+            return Err(
+                "pause_menu_button and pause_menu_url must both be set or both empty".into(),
+            );
+        }
+        if !self.pause_menu_button.is_empty() {
+            if self.pause_menu_button.len() > 127 {
+                return Err("pause_menu_button must be at most 127 bytes".into());
+            }
+            if !self.pause_menu_url.is_ascii() || self.pause_menu_url.len() > 65535 {
+                return Err("pause_menu_url must be ASCII and at most 65535 bytes".into());
+            }
+        }
+        let notification = !self.notification_title.is_empty()
+            || !self.notification_body.is_empty()
+            || !self.notification_source.is_empty();
+        if notification {
+            if crate::ui::component(&self.notification_title).len() > 255
+                || crate::ui::component(&self.notification_source).len() > 255
+            {
+                return Err(
+                    "serialized notification title and source must be at most 255 bytes".into(),
+                );
+            }
+            if crate::ui::component(&self.notification_body).len() > 32767 {
+                return Err("serialized notification_body must be at most 32767 bytes".into());
+            }
+        }
         if self.server_address.is_empty() || self.server_address.len() > 255 {
             return Err("server_address must contain 1..255 bytes".into());
         }
@@ -94,6 +141,20 @@ impl Config {
     }
     pub fn backend_addr(&self) -> SocketAddr {
         SocketAddr::new(self.backend_address, self.backend_port)
+    }
+    pub fn pause_menu(&self) -> Option<(&str, &str)> {
+        (!self.pause_menu_button.is_empty())
+            .then_some((&self.pause_menu_button, &self.pause_menu_url))
+    }
+    pub fn notification(&self) -> Option<(&str, &str, &str)> {
+        let enabled = !self.notification_title.is_empty()
+            || !self.notification_body.is_empty()
+            || !self.notification_source.is_empty();
+        enabled.then_some((
+            &self.notification_title,
+            &self.notification_body,
+            &self.notification_source,
+        ))
     }
 }
 
@@ -108,6 +169,8 @@ mod tests {
         assert_eq!(config.max_connections, 8);
         assert_eq!(config.connections_per_minute, 30);
         assert_eq!(config.diagnostics_interval_secs, 60);
+        assert!(config.ip_allowlist.is_empty());
+        assert!(config.ip_blocklist.is_empty());
         config.validate().unwrap();
     }
 
@@ -135,5 +198,58 @@ mod tests {
         ] {
             assert!(config.validate().is_err());
         }
+    }
+
+    #[test]
+    fn rejects_invalid_ip_filter_entries() {
+        for config in [
+            Config {
+                ip_allowlist: vec!["10.0.0.0/33".into()],
+                ..Config::default()
+            },
+            Config {
+                ip_blocklist: vec!["not-an-ip".into()],
+                ..Config::default()
+            },
+        ] {
+            assert!(config.validate().is_err());
+        }
+        Config {
+            ip_allowlist: vec!["192.168.0.0/16".into(), "::1".into()],
+            ip_blocklist: vec!["192.168.1.7".into()],
+            ..Config::default()
+        }
+        .validate()
+        .unwrap();
+    }
+
+    #[test]
+    fn pause_menu_and_notification_config_is_optional_and_validated() {
+        let mut config = Config {
+            pause_menu_button: "Discord".into(),
+            pause_menu_url: "https://example.com/invite".into(),
+            notification_title: "Welcome".into(),
+            notification_body: "Have fun".into(),
+            notification_source: "EaglerXPumkin".into(),
+            ..Config::default()
+        };
+        assert_eq!(
+            config.pause_menu(),
+            Some(("Discord", "https://example.com/invite"))
+        );
+        assert!(config.notification().is_some());
+        config.validate().unwrap();
+
+        config.pause_menu_url.clear();
+        assert!(config.validate().is_err());
+        config.pause_menu_url = "https://example.com".into();
+        config.pause_menu_button = "é".into();
+        assert!(config.pause_menu_url.is_ascii());
+        assert!(config.validate().is_ok()); // non-ASCII button text is UTF-8 encoded
+
+        let empty = Config::default();
+        assert_eq!(empty.pause_menu(), None);
+        assert_eq!(empty.notification(), None);
+        empty.validate().unwrap();
     }
 }

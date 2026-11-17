@@ -5,10 +5,14 @@ use crate::{
     config::Config,
     minecraft::{self as mc, Codec, Reader, Result},
     skins::{self, PlayerSkin, SkinStore},
+    ui,
 };
 use eagler_ws::{Message, OP_BIN, OP_TEXT};
 use md5::{Digest, Md5};
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Debug, PartialEq, Eq)]
 enum Stage {
@@ -29,6 +33,7 @@ pub struct Session {
     profiles: HashSet<String>,
     profile_bytes: usize,
     player_skin: PlayerSkin,
+    capabilities: u32,
     stalled: Vec<Vec<u8>>,
     stalled_bytes: usize,
     pub client_output: Vec<Message>,
@@ -49,6 +54,7 @@ impl Default for Session {
             profiles: HashSet::new(),
             profile_bytes: 0,
             player_skin: PlayerSkin::default(),
+            capabilities: 0,
             stalled: Vec::new(),
             stalled_bytes: 0,
             client_output: Vec::new(),
@@ -62,6 +68,18 @@ impl Default for Session {
 fn ascii(out: &mut Vec<u8>, text: &str) {
     out.push(text.len() as u8);
     out.extend_from_slice(text.as_bytes());
+}
+
+/// Optional capabilities this gateway can provide with its current config.
+fn optional_capabilities(cfg: &Config) -> u32 {
+    let mut caps = 0;
+    if cfg.pause_menu().is_some() {
+        caps |= ui::CAP_PAUSE_MENU;
+    }
+    if cfg.notification().is_some() {
+        caps |= ui::CAP_NOTIFICATION;
+    }
+    caps
 }
 
 impl Session {
@@ -222,9 +240,13 @@ impl Session {
                 }
                 if self.version >= 5 {
                     let caps = r.int()? as u32;
-                    for _ in 0..caps.count_ones() {
-                        r.int()?;
+                    let mut supported = 0u32;
+                    for bit in 0..32 {
+                        if caps & (1 << bit) != 0 && r.int()? & 1 != 0 {
+                            supported |= 1 << bit;
+                        }
                     }
+                    self.capabilities = supported & optional_capabilities(cfg);
                     let count = r.byte()?;
                     if count > 32 {
                         return Err("too many extended capabilities".into());
@@ -286,6 +308,30 @@ impl Session {
                     self.send(packet);
                 }
                 self.stalled_bytes = 0;
+                if self.version >= 5 {
+                    let accepted = self.capabilities;
+                    if accepted & ui::CAP_PAUSE_MENU != 0
+                        && let Some((button, url)) = cfg.pause_menu()
+                    {
+                        self.send(skins::injected(ui::pause_menu(button, url)));
+                    }
+                    if accepted & ui::CAP_NOTIFICATION != 0
+                        && let Some((title, body, source)) = cfg.notification()
+                    {
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .map(|elapsed| elapsed.as_secs())
+                            .unwrap_or(0);
+                        self.send(skins::injected(ui::notification(
+                            title,
+                            body,
+                            source,
+                            cfg.notification_hide_after_secs,
+                            cfg.notification_expire_after_secs,
+                            now,
+                        )));
+                    }
+                }
             }
             _ => return Err("unexpected Eagler handshake packet".into()),
         }
@@ -385,8 +431,15 @@ impl Session {
                         ascii(&mut allow, &self.username);
                         allow.extend_from_slice(&self.uuid);
                         if self.version >= 5 {
-                            allow.extend_from_slice(&[0, 0]);
-                        } // no optional capabilities
+                            let accepted = self.capabilities;
+                            mc::varint(&mut allow, accepted as i32);
+                            for bit in 0..32 {
+                                if accepted & (1 << bit) != 0 {
+                                    allow.push(0);
+                                }
+                            }
+                            allow.push(0); // no extended capabilities
+                        }
                         self.send(allow);
                         self.stage = Stage::Profiles;
                     }
@@ -621,5 +674,78 @@ mod tests {
         );
         assert!(session.backend_output.is_empty());
         assert!(session.client_output.is_empty());
+    }
+
+    #[test]
+    fn advertises_and_sends_configured_pause_menu_and_notification() {
+        let cfg = Config {
+            pause_menu_button: "Discord".into(),
+            pause_menu_url: "https://example.com".into(),
+            notification_title: "Welcome".into(),
+            notification_body: "Have fun".into(),
+            notification_source: "EaglerXPumkin".into(),
+            ..Config::default()
+        };
+        let mut session = Session::default();
+        let mut store = SkinStore::default();
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            b"\x01\x02\x00\x01\x00\x05\x00\x01\x03\x09\x04Test\x01x\x00\x00",
+        );
+        session.client_output.clear();
+        // Capabilities 0x18 (notification + pause menu), both V0.
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            b"\x04\x04Test\x07default\x00\x00\x00\x18\x01\x01\x00",
+        );
+        assert!(session.client_output.is_empty());
+
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        backend.next_packet().unwrap().unwrap(); // handshake
+        backend.next_packet().unwrap().unwrap(); // login
+        let mut success = vec![2];
+        success.extend_from_slice(&[7; 16]);
+        mc::string(&mut success, "Test");
+        success.push(0);
+        success.extend_from_slice(&[2; 16]);
+        session
+            .backend_bytes(&backend.encode(&success).unwrap())
+            .unwrap();
+        let allow = session.client_output.pop().unwrap().payload;
+        assert_eq!(&allow[22..], &[0x18, 0, 0, 0]);
+
+        session.client_output.clear();
+        client(&mut session, &cfg, &mut store, &[8]);
+        let payloads: Vec<Vec<u8>> = session
+            .client_output
+            .drain(..)
+            .map(|message| message.payload)
+            .collect();
+        assert_eq!(payloads.len(), 4);
+        assert_eq!(payloads[0], [9]);
+        assert_eq!(payloads[1][..2], [skins::INJECTED_PACKET, 0x21]);
+        assert_eq!(payloads[2][..2], [skins::INJECTED_PACKET, 0x18]);
+        assert_eq!(payloads[3][..2], [skins::INJECTED_PACKET, 0x1F]);
+
+        let mut r = mc::Reader::new(&payloads[2][2..]);
+        assert_eq!(r.byte().unwrap(), 1); // external URL mode
+        assert_eq!(r.text(127).unwrap(), "Discord");
+        assert_eq!(r.short().unwrap(), 19);
+        assert_eq!(r.take(19).unwrap(), b"https://example.com");
+        assert_eq!(r.int().unwrap(), 0); // no image mappings
+        r.end().unwrap();
+
+        let mut r = mc::Reader::new(&payloads[3][2..]);
+        assert_eq!(r.take(16).unwrap().len(), 16);
+        assert_eq!(r.text(32767).unwrap(), "{\"text\":\"Have fun\"}");
+        assert_eq!(r.text(255).unwrap(), "{\"text\":\"Welcome\"}");
+        assert_eq!(r.text(255).unwrap(), "{\"text\":\"EaglerXPumkin\"}");
     }
 }

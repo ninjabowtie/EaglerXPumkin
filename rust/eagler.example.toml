@@ -7,4 +7,15 @@ minecraft_protocol = 777
 max_connections = 64
 connections_per_minute = 30
 diagnostics_interval_secs = 60
+ip_allowlist = []
+ip_blocklist = []
+# Optional V5 pause-menu link. Set both or leave both empty.
+pause_menu_button = ""
+pause_menu_url = ""
+# Optional V5 join notification. Leave all three text fields empty to disable.
+notification_title = ""
+notification_body = ""
+notification_source = ""
+notification_hide_after_secs = 10
+notification_expire_after_secs = 3600
 motd = "EaglerXPumkin\nMinecraft 26.3"

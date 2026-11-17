@@ -72,6 +72,12 @@ source address over a rolling minute. `max_connections` remains the global cap;
 connections above either limit are accepted and closed immediately. Tune both
 for public deployments and load tests.
 
+`ip_allowlist` and `ip_blocklist` accept exact addresses or CIDR ranges (IPv4 or
+IPv6). When the allowlist is non-empty, only matching addresses may connect; the
+blocklist always takes precedence. Rules are checked before the rate limiter, so
+blocked attempts do not consume an address's connection budget. Rejected
+attempts are counted separately in diagnostics.
+
 For the tested Gaius HTML, use an offline profile, then Multiplayer -> Direct
 Connect -> **127.0.0.1:25565**. Gaius automatically tries
 `ws://127.0.0.1:8081/tunnel`. Its `directPluginPort` URL option can select a
@@ -82,8 +88,8 @@ For Eaglercraft, use **ws://127.0.0.1:8081/** with a protocol 777 client.
 
 Every `diagnostics_interval_secs` (default `60`, `0` disables) the gateway logs
 one `Eagler gateway:` line with active and playing counts, lifetime peaks,
-accepted/closed/refused/rate-limited totals, and throughput since the previous
-report. Rejected connections and failed sessions also log the peer address at
+accepted/closed/refused/filtered/rate-limited totals, and throughput since the
+previous report. Rejected connections and failed sessions also log the peer address at
 debug/warn level. The counters are cumulative and reset only on plugin reload;
 use the periodic throughput figures for sustained-load measurements rather than
 wall-clock timers in the client.
@@ -102,6 +108,32 @@ webview and server-info injected messages are dropped for the same reason.
 
 Entries are removed when the last session for that UUID disconnects; skins are
 not persisted, since only connected players need textures.
+
+## Pause menu and join notifications
+
+Two optional V5 client features are available through static config:
+
+```toml
+pause_menu_button = "Discord"
+pause_menu_url = "https://example.com/invite"
+notification_title = "Welcome"
+notification_body = "Have fun!"
+notification_source = "EaglerXPumkin"
+notification_hide_after_secs = 10
+notification_expire_after_secs = 3600
+```
+
+`pause_menu_button` adds a button to the pause menu that opens
+`pause_menu_url` in a new browser tab. Set both fields or leave both empty. The
+notification fields show one text notification after the player joins the
+world; the badge reuses a stable UUID so a reconnect replaces the previous
+message instead of stacking it. Notifications require at least one of the three
+text fields.
+
+Both features are advertised during the V5 capability exchange only when they
+are configured and the client supports them, so clients without V5 support are
+unaffected. Only static content is implemented; per-event notifications and
+message channels driven by the backend remain future work.
 
 ## Development and verification
 
@@ -141,11 +173,13 @@ benchmark.
 26.3 is the current target. Eaglercraft uses offline accounts, so the offline
 username login is the intended model and no password/registration flow is
 planned. Older Minecraft clients require a translation layer; Pumpkin's version
-enum alone does not provide that. Adaptive packet batching, notifications, pause
-menu extensions, EaglerWeb, rewind and full Java feature parity remain outside
-this working first release. V5 skins are implemented in memory for connected
-players; there is no persistent skin cache or URL skin fetching. The gateway
-does not advertise optional Eagler v5 capabilities it cannot provide.
+enum alone does not provide that. Adaptive packet batching, dynamic
+backend-driven notifications, message channels, EaglerWeb, rewind and full Java
+feature parity remain outside this working first release. V5 skins are
+implemented in memory for connected players; there is no persistent skin cache
+or URL skin fetching. Static pause-menu links and join notifications are
+available when configured. The gateway does not advertise optional Eagler v5
+capabilities it cannot provide.
 
 Eaglercraft voice chat (IVMP) is intentionally out of scope. Voice chat will be
 handled by a separate plugin selected by the project owner.

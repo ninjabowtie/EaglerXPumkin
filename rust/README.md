@@ -337,8 +337,10 @@ packet bodies). Unit coverage includes partial TCP reads/writes, incremental
 WebSocket fragmentation, 64 KiB+ frames, HTTP upgrades, compression transitions,
 malformed lengths, Eagler login ordering, skin profile parsing and injected
 skin responses, per-address rate limiting, and animated MOTD frame cycling
-with the max-age close. This is not a throughput
-benchmark.
+with the max-age close. The `eagler-ws` frame codec micro-benchmark
+(`frame_codec_micro_benchmark`) records encode+decode throughput and round-trip
+latency for representative packet payloads (64 B through 256 KiB). This is not a
+throughput benchmark.
 
 For a sustained multi-client soak with fuzzing, with the real server and
 gateway running, from the repository root:

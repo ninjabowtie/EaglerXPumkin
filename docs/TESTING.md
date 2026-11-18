@@ -29,6 +29,11 @@ bidirectional relay. Malformed requests, backend login failures and unsupported
 versions are covered separately. These simulated packets do not establish
 real-client gameplay compatibility for every admitted protocol.
 
+The `eagler-ws` frame codec micro-benchmark (`frame_codec_micro_benchmark`) records
+encode+decode throughput and round-trip latency for representative packet
+payloads (64 B through 256 KiB) as part of the native Rust suite. See the
+[Phase 0 roadmap](PUMPKIN_PORT_PLAN.md) for the recorded numbers.
+
 Python tests cover release-input handling, deadline behavior, and rejection
 checks that distinguish a peer close from a timeout. They need no running
 server. The manual release workflow currently runs `test_release.py` and the

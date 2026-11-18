@@ -35,3 +35,8 @@ motd_frames = []
 motd_interval_ms = 250
 motd_close_after_ms = 60000
 motd = "EaglerXPumpkin\nMinecraft 26.3"
+# Optional server icon for MOTD/server-list answers: an image URL or data URI.
+# Leave unset to use the built-in EaglerXPumpkin icon embedded from the
+# repository image (EaglerXPumpkin.png). Set this to override the default for
+# deployments that host their own icon.
+# motd_icon = "data:image/png;base64,..."

@@ -229,6 +229,17 @@ The `motd` string answers Eagler server-list queries with up to two lines and
 is sent once per query with `"cache": true`, after which the query connection
 closes.
 
+The answer also carries a server icon. By default it is the built-in EaglerXPumpkin
+icon: the repository's `EaglerXPumpkin.png` embedded as a base64 data URI, so
+browser (EaglerCraft) clients see the EaglerXPumpkin server icon instead of the
+backend's default. Answers are produced only by the Eagler gateway listener, so
+the default applies only to EaglerCraft/Eagler connections arriving through the
+gateway.
+
+Set `motd_icon` to override the default with an image URL or data URI for
+deployments that host their own icon; leave it unset for the built-in icon. The
+value must be a non-empty ASCII image URL or data URI of at most 2097152 bytes.
+
 Set `motd_frames` to animate it instead. Each entry is one full frame in the
 same `line1\nline2` format (up to 32 frames, 2048 bytes each). The query
 connection then stays open: frames cycle every `motd_interval_ms`

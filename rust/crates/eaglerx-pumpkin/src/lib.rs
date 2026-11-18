@@ -7,6 +7,21 @@ mod session;
 mod skins;
 mod ui;
 
+/// Server icon for EaglerXPumpkin, embedded from the repository image
+/// (`EaglerXPumkin.png`) as base64 so MOTD/server-list answers can override the
+/// backend's default icon without any runtime fetch.
+pub const EAGLER_ICON: &[u8] = include_bytes!("../../../../EaglerXPumpkin.png");
+
+/// Built-in MOTD/server icon for EaglerXPumpkin: the repository's
+/// `EaglerXPumpkin.png` as a base64 data URI, used when no admin override is
+/// configured.
+pub fn builtin_motd_icon() -> String {
+    format!(
+        "data:image/png;base64,{}",
+        eagler_ws::base64_encode(EAGLER_ICON)
+    )
+}
+
 #[cfg(target_os = "wasi")]
 mod plugin {
     use crate::{config::Config, runtime::Runtime};

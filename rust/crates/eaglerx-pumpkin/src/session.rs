@@ -89,7 +89,8 @@ fn ascii(out: &mut Vec<u8>, text: &str) {
 
 /// Serialize one MOTD query response. Animated frames disable client-side
 /// caching (so the browser re-queries the sequence) and carry the reference's
-/// epoch-millisecond timestamp; static answers keep the verified shape.
+/// epoch-millisecond timestamp; static answers keep the verified shape and use
+/// the configured server icon, defaulting to the built-in EaglerXPumpkin icon.
 fn motd_frame(cfg: &Config, online: usize, frame: &[&str], animated: bool) -> Vec<u8> {
     let time = if animated {
         SystemTime::now()
@@ -99,10 +100,15 @@ fn motd_frame(cfg: &Config, online: usize, frame: &[&str], animated: bool) -> Ve
     } else {
         0
     };
+    let icon = if animated {
+        serde_json::Value::Bool(false)
+    } else {
+        serde_json::json!(cfg.motd_icon())
+    };
     serde_json::json!({
         "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
         "cracked": true, "secure": false, "type": "motd", "time": time,
-        "data": { "motd": frame, "cache": !animated, "icon": false,
+        "data": { "motd": frame, "cache": !animated, "icon": icon,
             "online": online, "max": cfg.max_connections, "players": [] }
     })
     .to_string()
@@ -337,7 +343,7 @@ impl Session {
                 "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
                 "cracked": true, "secure": false, "type": "motd", "time": 0,
                 "data": { "motd": cfg.motd.lines().take(2).collect::<Vec<_>>(), "cache": true,
-                    "icon": false, "online": online, "max": cfg.max_connections, "players": [] }
+                    "icon": cfg.motd_icon(), "online": online, "max": cfg.max_connections, "players": [] }
             });
             self.client_output.push(Message {
                 opcode: OP_TEXT,
@@ -1220,6 +1226,34 @@ mod tests {
         assert!(text.contains("\"cache\":true"));
         assert!(text.contains("\"online\":2"));
         assert!(text.contains("Minecraft 26.3"));
+        // Static answers carry the built-in EaglerXPumpkin server icon as a
+        // base64 data URI unless the admin overrides motd_icon.
+        assert!(text.contains("\"icon\":\"data:image/png;base64,"));
+    }
+
+    #[test]
+    fn static_motd_query_uses_configured_server_icon() {
+        let cfg = Config {
+            motd_icon: Some("https://example.com/eaglerxpumpkin.png".into()),
+            ..Config::default()
+        };
+        let mut session = Session::default();
+        let mut store = SkinStore::default();
+        session
+            .client_message(
+                Message {
+                    opcode: OP_TEXT,
+                    payload: b"Accept: MOTD".to_vec(),
+                },
+                &cfg,
+                0,
+                &mut store,
+            )
+            .unwrap();
+        assert!(session.closing);
+        let text = String::from_utf8(session.client_output[0].payload.clone()).unwrap();
+        assert!(text.contains("\"icon\":\"https://example.com/eaglerxpumpkin.png\""));
+        assert!(!text.contains("data:image/png;base64,"));
     }
 
     #[test]

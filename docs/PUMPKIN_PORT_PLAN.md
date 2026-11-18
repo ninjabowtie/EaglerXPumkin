@@ -210,7 +210,9 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   EaglerMOTD's interval/close_socket_after mechanics and disabling the
   client-side cache while animated. Scoped port: per-frame server icons,
   sprite sheets, weighted message pools, named message chains and the
-  cache-control query subtypes of the EaglerMOTD addon are not ported. The
+  cache-control query subtypes of the EaglerMOTD addon are not ported. Static
+  server-list answers now carry the built-in EaglerXPumpkin server icon as a
+  base64 data URI, overridable with `motd_icon`. The
   graphical client verified so far (Gaius) uses `/tunnel` and does not
   exercise the MOTD query path. Automated unit and real-socket integration
   tests cover text cycling and max-age closure; graphical MOTD verification

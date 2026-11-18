@@ -40,6 +40,12 @@ pub struct Config {
     pub motd_frames: Vec<String>,
     pub motd_interval_ms: u16,
     pub motd_close_after_ms: u32,
+    /// Optional server icon (image URL or data URI) for MOTD/server-list
+    /// answers. `None` selects the built-in EaglerXPumpkin icon embedded from
+    /// the repository, so browser (EaglerCraft) clients see the EaglerXPumpkin
+    /// server icon instead of the backend default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub motd_icon: Option<String>,
 }
 
 impl Default for Config {
@@ -69,6 +75,7 @@ impl Default for Config {
             motd_frames: Vec::new(),
             motd_interval_ms: 250,
             motd_close_after_ms: 60_000,
+            motd_icon: None,
         }
     }
 }
@@ -194,6 +201,14 @@ impl Config {
         if self.motd_close_after_ms > 3_600_000 {
             return Err("motd_close_after_ms must be at most 3600000".into());
         }
+        if let Some(icon) = &self.motd_icon
+            && (icon.is_empty() || icon.len() > 2_097_152 || !icon.is_ascii())
+        {
+            return Err(
+                "motd_icon must be a non-empty ASCII image URL or data URI of at most 2097152 bytes"
+                    .into(),
+            );
+        }
         if !self.motd_frames.is_empty() {
             if self.motd_interval_ms == 0 {
                 return Err(
@@ -248,6 +263,15 @@ impl Config {
             Duration::from_millis(u64::from(self.motd_interval_ms)),
             Duration::from_millis(u64::from(self.motd_close_after_ms)),
         ))
+    }
+    /// Server icon for MOTD/server-list answers: the admin-configured override
+    /// when set, otherwise the built-in EaglerXPumpkin icon embedded from the
+    /// repository image. The gateway answers EaglerCraft (Eagler) queries, so
+    /// this applies only to clients arriving through the gateway listener.
+    pub fn motd_icon(&self) -> String {
+        self.motd_icon
+            .clone()
+            .unwrap_or_else(crate::builtin_motd_icon)
     }
 }
 
@@ -407,6 +431,39 @@ mod tests {
         }
         .validate()
         .unwrap();
+    }
+
+    #[test]
+    fn motd_icon_defaults_to_the_builtin_server_icon_and_can_be_overridden() {
+        let config = Config::default();
+        assert!(config.motd_icon.is_none());
+        assert!(config.motd_icon().starts_with("data:image/png;base64,"));
+
+        let override_config = Config {
+            motd_icon: Some("https://example.com/eaglerxpumpkin.png".into()),
+            ..Config::default()
+        };
+        assert_eq!(
+            override_config.motd_icon(),
+            "https://example.com/eaglerxpumpkin.png"
+        );
+
+        for bad in [
+            Config {
+                motd_icon: Some(String::new()),
+                ..Config::default()
+            },
+            Config {
+                motd_icon: Some("é".into()),
+                ..Config::default()
+            },
+            Config {
+                motd_icon: Some("a".repeat(2_097_153)),
+                ..Config::default()
+            },
+        ] {
+            assert!(bad.validate().is_err(), "invalid motd_icon accepted");
+        }
     }
 
     #[test]

@@ -817,18 +817,155 @@ mod tests {
 
     /// A V5 handshake packet offering `versions` as the Minecraft protocols.
     fn handshake(versions: &[u16]) -> Vec<u8> {
+        handshake_offering(&[5], versions)
+    }
+
+    /// An Eagler handshake packet offering `eagler` handshake versions and
+    /// `protocols` as the Minecraft protocols.
+    fn handshake_offering(eagler: &[u16], protocols: &[u16]) -> Vec<u8> {
         let mut packet = vec![1, 2];
-        packet.extend_from_slice(&1u16.to_be_bytes()); // one Eagler version
-        packet.extend_from_slice(&5u16.to_be_bytes()); // handshake v5
-        packet.extend_from_slice(&(versions.len() as u16).to_be_bytes());
-        for version in versions {
+        packet.extend_from_slice(&(eagler.len() as u16).to_be_bytes());
+        for version in eagler {
             packet.extend_from_slice(&version.to_be_bytes());
+        }
+        packet.extend_from_slice(&(protocols.len() as u16).to_be_bytes());
+        for protocol in protocols {
+            packet.extend_from_slice(&protocol.to_be_bytes());
         }
         ascii(&mut packet, "Test"); // brand
         ascii(&mut packet, "x"); // client version
         packet.push(0); // no authentication
         packet.push(0); // empty initial identity
         packet
+    }
+
+    /// A v5 login request for username "Test": no password, optional cookie
+    /// bytes, `caps` capability bits marked supported, no extended capabilities.
+    fn request_v5(cookie: &[u8], caps: u32) -> Vec<u8> {
+        let mut request = vec![4];
+        ascii(&mut request, "Test");
+        ascii(&mut request, "default");
+        request.push(0); // no password
+        request.push(u8::from(!cookie.is_empty()));
+        request.push(cookie.len() as u8);
+        request.extend_from_slice(cookie);
+        mc::varint(&mut request, caps as i32);
+        for bit in 0..32 {
+            if caps & (1 << bit) != 0 {
+                mc::varint(&mut request, 1); // capability version 0
+            }
+        }
+        request.push(0); // no extended capabilities
+        request
+    }
+
+    /// Full packet/state regression for each admitted protocol generation:
+    /// negotiation, version-correct Login Start injection, offline login, the
+    /// 1.20.2+ Login Acknowledged round trip, compression transition,
+    /// configuration stalling and play-packet relay.
+    #[test]
+    fn full_login_and_compression_flow_matches_each_protocol_generation() {
+        for (protocol, threshold) in (755..=777)
+            .flat_map(|protocol| [None, Some(1), Some(256)].map(|threshold| (protocol, threshold)))
+        {
+            let login_acknowledged = protocol >= 764;
+            let cfg = cfg_range(Some(protocol), Some(protocol));
+            let mut session = Session::default();
+            let mut store = SkinStore::default();
+            client(&mut session, &cfg, &mut store, &handshake(&[protocol]));
+            client(&mut session, &cfg, &mut store, &request_v5(&[], 0));
+            assert!(session.connect_requested);
+            session.client_output.clear(); // discard the version negotiation reply
+
+            // The backend receives the injected Handshake and Login Start.
+            let mut backend = Codec::default();
+            backend
+                .push(&std::mem::take(&mut session.backend_output))
+                .unwrap();
+            let handshake_packet = backend.next_packet().unwrap().unwrap();
+            let mut r = Reader::new(&handshake_packet);
+            assert_eq!(r.byte().unwrap(), 0);
+            assert_eq!(r.int().unwrap(), i32::from(protocol));
+            r.text(255).unwrap(); // server_address
+            assert_eq!(r.short().unwrap(), cfg.backend_port);
+            assert_eq!(r.byte().unwrap(), 2); // login next state
+            r.end().unwrap();
+            let login = backend.next_packet().unwrap().unwrap();
+            let mut expected = vec![0];
+            mc::string(&mut expected, "Test");
+            login_start(&mut expected, protocol, &session.uuid);
+            assert_eq!(login, expected, "Login Start for protocol {protocol}");
+
+            // The backend enables compression before the login succeeds, and
+            // the 1.20.2+ Login Acknowledged reply uses the same codec.
+            if let Some(threshold) = threshold {
+                let mut compression = vec![3];
+                mc::varint(&mut compression, threshold as i32);
+                session
+                    .backend_bytes(&backend.encode(&compression).unwrap())
+                    .unwrap();
+            }
+            assert_eq!(session.codec.compression, threshold);
+            backend.compression = threshold;
+
+            let mut success = vec![2];
+            success.extend_from_slice(&[1; 16]);
+            mc::string(&mut success, "Test");
+            session
+                .backend_bytes(&backend.encode(&success).unwrap())
+                .unwrap();
+            if login_acknowledged {
+                let mut echo = Codec::default();
+                echo.compression = threshold;
+                echo.push(&std::mem::take(&mut session.backend_output))
+                    .unwrap();
+                assert_eq!(echo.next_packet().unwrap().unwrap(), [3]);
+                assert!(echo.next_packet().unwrap().is_none());
+            } else {
+                assert!(session.backend_output.is_empty());
+            }
+            let allow = session.client_output.pop().unwrap().payload;
+            assert_eq!(allow[0], 5);
+            assert_eq!(&allow[6..22], &[1; 16]); // backend UUID wins
+            assert!(session.client_output.is_empty());
+
+            // Backend packets stall until the Eagler login finishes,
+            // then flush to the client in order ahead of the play stage.
+            // Older protocols enter play directly; newer ones enter configuration.
+            let known = if login_acknowledged {
+                vec![15, 0]
+            } else {
+                vec![0x21, 0]
+            };
+            session
+                .backend_bytes(&backend.encode(&known).unwrap())
+                .unwrap();
+            let profile = vec![7, 0]; // no profile data
+            client(&mut session, &cfg, &mut store, &profile);
+            client(&mut session, &cfg, &mut store, &[8]);
+            let outputs: Vec<Vec<u8>> = session
+                .client_output
+                .drain(..)
+                .map(|message| message.payload)
+                .collect();
+            assert_eq!(outputs, [vec![9], skins::disable_skin_url_lookup(), known]);
+            assert!(session.is_playing());
+
+            // Play packets relay in both directions over the compressed
+            // backend leg, one packet body per WebSocket message.
+            let keepalive = [0x19, 1, 2, 3, 4, 5, 6, 7, 8];
+            session
+                .backend_bytes(&backend.encode(&keepalive).unwrap())
+                .unwrap();
+            assert_eq!(session.client_output.pop().unwrap().payload, keepalive);
+            client(&mut session, &cfg, &mut store, &[3]); // opaque serverbound packet
+            let mut echo = Codec::default();
+            echo.compression = threshold;
+            echo.push(&std::mem::take(&mut session.backend_output))
+                .unwrap();
+            assert_eq!(echo.next_packet().unwrap().unwrap(), [3]);
+            assert!(echo.next_packet().unwrap().is_none());
+        }
     }
 
     #[test]
@@ -1216,5 +1353,191 @@ mod tests {
         assert_eq!(r.text(32767).unwrap(), "{\"text\":\"Have fun\"}");
         assert_eq!(r.text(255).unwrap(), "{\"text\":\"Welcome\"}");
         assert_eq!(r.text(255).unwrap(), "{\"text\":\"EaglerXPumpkin\"}");
+    }
+
+    /// A session whose backend login has succeeded, ready to receive Eagler
+    /// profile data, with a codec wired to its backend stream.
+    fn profiles_session() -> (Session, Config, SkinStore, Codec) {
+        let (mut session, cfg, store) = start();
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        let mut success = vec![2];
+        success.extend_from_slice(&[7; 16]);
+        mc::string(&mut success, "Test");
+        session
+            .backend_bytes(&backend.encode(&success).unwrap())
+            .unwrap();
+        session.client_output.clear();
+        (session, cfg, store, backend)
+    }
+
+    /// Malformed requests and backend failure paths reject cleanly instead of
+    /// reaching the backend or corrupting the session.
+    #[test]
+    fn malformed_requests_and_backend_failures_reject_cleanly() {
+        let mut store = SkinStore::default();
+
+        // Invalid usernames fail before any backend connection is requested.
+        for bad in ["", "has space", "bad!chars", "way-too-long-name"] {
+            let cfg = Config::default();
+            let mut session = Session::default();
+            client(&mut session, &cfg, &mut store, &handshake(&[777]));
+            let mut request = vec![4];
+            ascii(&mut request, bad);
+            ascii(&mut request, "default");
+            request.extend_from_slice(&[0, 0, 0, 0, 0]);
+            let error = session
+                .client_message(
+                    Message {
+                        opcode: OP_BIN,
+                        payload: request,
+                    },
+                    &cfg,
+                    0,
+                    &mut store,
+                )
+                .unwrap_err();
+            assert_eq!(
+                error,
+                "username must contain 1..16 letters, digits or underscores"
+            );
+            assert!(!session.connect_requested);
+        }
+
+        let cfg = Config::default();
+        // A v5 cookie flag of zero with a nonzero length is rejected.
+        let mut session = Session::default();
+        client(&mut session, &cfg, &mut store, &handshake(&[777]));
+        let error = session
+            .client_message(
+                Message {
+                    opcode: OP_BIN,
+                    payload: b"\x04\x04Test\x07default\x00\x00\x05".to_vec(),
+                },
+                &cfg,
+                0,
+                &mut store,
+            )
+            .unwrap_err();
+        assert_eq!(error, "invalid cookie length");
+        assert!(!session.connect_requested);
+
+        // A cookie carrying data is accepted and the login still proceeds.
+        let mut session = Session::default();
+        client(&mut session, &cfg, &mut store, &handshake(&[777]));
+        client(&mut session, &cfg, &mut store, &request_v5(&[7], 0));
+        assert!(session.connect_requested);
+
+        // An out-of-order login finish during the request stage is rejected.
+        let mut session = Session::default();
+        client(&mut session, &cfg, &mut store, &handshake(&[777]));
+        let error = session
+            .client_message(
+                Message {
+                    opcode: OP_BIN,
+                    payload: vec![8],
+                },
+                &cfg,
+                0,
+                &mut store,
+            )
+            .unwrap_err();
+        assert_eq!(error, "unexpected Eagler handshake packet");
+
+        // A legacy Eagler v4 handshake cannot negotiate a modern protocol.
+        let cfg = cfg_range(Some(755), Some(777));
+        let mut session = Session::default();
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            &handshake_offering(&[4], &[755]),
+        );
+        assert!(session.closing);
+        assert_eq!(session.client_output[0].payload[0], 3); // mismatch packet
+
+        // Excessive profile data is rejected on entry count and total bytes.
+        let (mut session, cfg, mut store, _backend) = profiles_session();
+        let mut profile = vec![7, 17];
+        for index in 0..17u8 {
+            profile.push(1); // name length
+            profile.push(b'a' + index);
+            profile.extend_from_slice(&[0, 0]); // empty value
+        }
+        let error = session
+            .client_message(
+                Message {
+                    opcode: OP_BIN,
+                    payload: profile,
+                },
+                &cfg,
+                0,
+                &mut store,
+            )
+            .unwrap_err();
+        assert_eq!(error, "excessive profile data");
+
+        let (mut session, cfg, mut store, _backend) = profiles_session();
+        let mut profile = vec![7, 2, 0];
+        profile.extend_from_slice(&65535u16.to_be_bytes());
+        profile.extend(vec![0u8; 65535]);
+        profile.push(0);
+        profile.extend_from_slice(&2u16.to_be_bytes());
+        profile.extend_from_slice(&[0, 0]);
+        let error = session
+            .client_message(
+                Message {
+                    opcode: OP_BIN,
+                    payload: profile,
+                },
+                &cfg,
+                0,
+                &mut store,
+            )
+            .unwrap_err();
+        assert_eq!(error, "excessive profile data");
+
+        // An encryption request means the backend is not in offline mode.
+        let (mut session, _cfg, _store) = start();
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        session
+            .backend_bytes(&backend.encode(&[1]).unwrap())
+            .unwrap();
+        assert!(session.closing);
+        let disconnect = session.client_output[0].payload.clone();
+        assert_eq!(&disconnect[..2], &[0xff, 8]);
+        assert!(String::from_utf8_lossy(&disconnect[4..]).contains("offline mode"));
+
+        // A backend disconnect propagates its reason to the client.
+        let (mut session, _cfg, _store) = start();
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        let mut packet = vec![0u8]; // disconnect
+        mc::string(&mut packet, "No reason");
+        session
+            .backend_bytes(&backend.encode(&packet).unwrap())
+            .unwrap();
+        assert!(session.closing);
+        let disconnect = session.client_output[0].payload.clone();
+        assert_eq!(&disconnect[..2], &[0xff, 8]);
+        assert!(String::from_utf8_lossy(&disconnect[4..]).contains("No reason"));
+
+        // An unexpected backend login packet id fails the session.
+        let (mut session, _cfg, _store) = start();
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        let error = session
+            .backend_bytes(&backend.encode(&[9]).unwrap())
+            .unwrap_err();
+        assert_eq!(error, "unexpected backend login packet");
     }
 }

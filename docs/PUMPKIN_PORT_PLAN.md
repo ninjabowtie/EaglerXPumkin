@@ -62,6 +62,10 @@ remain deferred separately.
 - [ ] Inventory exact 1.17+ Eaglercraft builds and establish a version matrix:
   client/build, Minecraft protocol, Eagler handshake version, transport,
   Pumpkin release, translation component/version, test date and result.
+  Started: the [compatibility matrix](../tests/compatibility/README.md)
+  records SHA-256 hashes for local Eaglercraft 26.2 0.3-dev and Gaius
+  1.21.11/26.2/26.3 builds. Observed game protocols, Eagler handshake versions,
+  upstream provenance and graphical acceptance remain pending.
 - [x] Select Multiversion as the companion translation dependency and document
   the loopback proxy setup. Local Multiversion 0.6.1 verification covered a
   simulated 1.17 (protocol 755) Eagler play flow through the proxy — join,
@@ -83,17 +87,32 @@ remain deferred separately.
   Acknowledged for 1.20.2+ backends, and answers unsupported clients with a
   mismatch packet naming the accepted protocols. Translation routing is
   delegated to Multiversion via the loopback backend.
-- [ ] Add automated handshake and packet/state transition regressions for each
+- [x] Add automated handshake and packet/state transition regressions for each
   admitted protocol, including malformed requests and unsupported versions.
-  Partial: Login Start construction, protocol selection and the mismatch reply
-  are unit-tested per protocol generation; packet and state coverage for live
-  1.17+ streams is still pending real-client verification.
+  Unit tests exercise every protocol 755–777 with compression disabled and
+  thresholds 1/256: backend handshake/Login Start injection, Login Acknowledged
+  where applicable, profile-stage buffering and bidirectional packet relay.
+  Malformed requests, excessive profiles, backend rejection/encryption and
+  unsupported-version paths have regression coverage. These are simulated
+  packet/state tests; graphical compatibility remains a separate milestone.
 - [ ] Verify each candidate with a real graphical client: offline login, world
   and chunk loading, movement/teleports, chat, inventory, block breaking and
   placement, entity interaction, keepalives, disconnect and reconnect. Check
   skins and optional UI features only where advertised.
 - [ ] Run mixed-client sessions and sustained tests alongside the existing
   26.3 probes; retain Gaius tunnel and vanilla TCP regression checks.
+  Partial: the [recorded 2026-11-18 UTC run](../tests/results/2026-11-18-mixed-clients/summary.json)
+  passed simultaneous simulated Eagler 755, Eagler 777, Gaius tunnel 777 and
+  vanilla TCP 777 sessions through the existing gateway. All required login,
+  teleport, chunks, chat echo and keepalive responses. Reusable probes and
+  per-case evidence are in `tests/results/`. The subsequent
+  [sustained run](../tests/results/2026-11-18-mixed-sustained/README.md) kept
+  all four clients in play for 120 seconds each (seven keepalive replies per
+  client) and passed same-identity reconnect checks for all four. A separate
+  follow-up passed four MOTD queries and ten malformed-input attempts across
+  six vectors. Real graphical clients, longer measurements and fuzzing during
+  mixed play remain pending; the running translation plugin's exact
+  binary/version was not re-established for these runs.
 - [ ] Publish tested matrix entries and installation instructions before marking
   individual versions supported. Add subsequent 1.17+ protocols incrementally;
   do not label the whole version range supported based on one passing client.
@@ -216,8 +235,10 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - [ ] Vanilla Java client regression while the Eagler listener is active.
 - [ ] Sustained multi-client soak and fuzz run. The script
   rust/tests/soak_26_3.py is provided and was validated against the native
-  gateway for its MOTD health-check and fuzz paths; a recorded sustained run
-  with concurrent game clients still needs a live server.
+  gateway for its MOTD health-check and fuzz paths. A recorded 120-second
+  four-client simulated run plus reconnects and a separate health/fuzz phase
+  now exist in `tests/results/2026-11-18-mixed-sustained/`. A longer soak with
+  simultaneous fuzzing and real graphical clients remains pending.
 - [ ] Tracked Pumpkin-release × Eagler-client version matrix.
 
 ## Next work

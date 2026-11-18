@@ -1,0 +1,65 @@
+{
+  "inventory_date_utc": "2026-11-18",
+  "clients": [
+    {
+      "file": "eagler26.2.html",
+      "build": "Eaglercraft 26.2 0.3-dev",
+      "sha256": "3b63bf2631f1a9d1bacb3e9913e67744553425747972fd6b21fae2f000933342",
+      "size_bytes": 75182362,
+      "expected_minecraft_protocol": 776,
+      "observed_minecraft_protocol": null,
+      "eagler_handshake_version": null,
+      "transport": "Eagler / (unconfirmed)",
+      "source": "Existing local Downloads artifact; upstream provenance not recorded",
+      "pumpkin_release": null,
+      "translation_version": null,
+      "test_date": null,
+      "result": "pending graphical verification"
+    },
+    {
+      "file": "Gaius-1.21.11-portable-v0.4.0-pre6.html",
+      "build": "Gaius 1.21.11 v0.4.0-pre6",
+      "sha256": "52dc2ccdef953c2cea4e96cef1643b6d5c833bf4bffb3f9466180dcf19a73a95",
+      "size_bytes": 167561053,
+      "expected_minecraft_protocol": 774,
+      "observed_minecraft_protocol": null,
+      "eagler_handshake_version": null,
+      "transport": "Gaius /tunnel",
+      "source": "Existing local Downloads artifact; upstream provenance not recorded",
+      "pumpkin_release": null,
+      "translation_version": null,
+      "test_date": null,
+      "result": "pending graphical verification"
+    },
+    {
+      "file": "Gaius-26.2-portable-v0.4.0-pre6.html",
+      "build": "Gaius 26.2 v0.4.0-pre6",
+      "sha256": "2da013ca94aae9c8e050619fb43fb6cbca111feef026f0f34aceff7aefd22369",
+      "size_bytes": 177860567,
+      "expected_minecraft_protocol": 776,
+      "observed_minecraft_protocol": null,
+      "eagler_handshake_version": null,
+      "transport": "Gaius /tunnel",
+      "source": "Existing local Downloads artifact; upstream provenance not recorded",
+      "pumpkin_release": null,
+      "translation_version": null,
+      "test_date": null,
+      "result": "pending graphical verification"
+    },
+    {
+      "file": "Gaius-26.3-portable-v0.4.0-c263.html",
+      "build": "Gaius 26.3 v0.4.0-c263",
+      "sha256": "2543db09cecf3281cdc0152b07b898617e390228ac91f5890c787553a4b2b202",
+      "size_bytes": 187021444,
+      "expected_minecraft_protocol": 777,
+      "observed_minecraft_protocol": null,
+      "eagler_handshake_version": null,
+      "transport": "Gaius /tunnel",
+      "source": "Existing local Downloads artifact; upstream provenance not recorded",
+      "pumpkin_release": null,
+      "translation_version": null,
+      "test_date": null,
+      "result": "pending graphical verification"
+    }
+  ]
+}

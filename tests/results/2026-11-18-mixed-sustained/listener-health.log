@@ -1,0 +1,26 @@
+soak 10s: {"fuzz_rounds": 5, "fuzz_bytes": 686, "fuzz_vector_0": 1, "motd_queries": 2, "motd_frames": 2, "fuzz_vector_1": 1, "fuzz_vector_2": 1, "fuzz_vector_3": 1, "fuzz_vector_4": 1}
+soak 20s: {"fuzz_rounds": 10, "fuzz_bytes": 1389, "fuzz_vector_0": 2, "motd_queries": 4, "motd_frames": 4, "fuzz_vector_1": 2, "fuzz_vector_2": 2, "fuzz_vector_3": 2, "fuzz_vector_4": 1, "fuzz_vector_5": 1}
+{
+  "started_utc": "2026-11-18T02:27:11.714080+00:00",
+  "finished_utc": "2026-11-18T02:27:32.593326+00:00",
+  "requested_seconds": 20,
+  "clients": 0,
+  "fuzz_clients": 1,
+  "host": "127.0.0.1",
+  "port": 8081,
+  "final": {
+    "fuzz_rounds": 10,
+    "fuzz_bytes": 1389,
+    "fuzz_vector_0": 2,
+    "motd_queries": 4,
+    "motd_frames": 4,
+    "fuzz_vector_1": 2,
+    "fuzz_vector_2": 2,
+    "fuzz_vector_3": 2,
+    "fuzz_vector_4": 1,
+    "fuzz_vector_5": 1
+  },
+  "errors": [],
+  "passed": true
+}
+soak passed

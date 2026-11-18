@@ -175,10 +175,7 @@ fn malformed_sessions_are_rejected_without_harming_the_listener() {
     send_frame(&mut stream, 1, b"Accept: garbage").unwrap();
     let mut saw_binary = false;
     let mut saw_close = false;
-    loop {
-        let Some((opcode, _data)) = recv_frame(&mut stream).expect("rejection") else {
-            break;
-        };
+    while let Some((opcode, _data)) = recv_frame(&mut stream).expect("rejection") {
         match opcode {
             2 => saw_binary = true, // Eagler disconnect packet
             8 => {

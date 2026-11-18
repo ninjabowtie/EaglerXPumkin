@@ -1,0 +1,29 @@
+{
+  "started_utc": "2026-11-18T02:21:33.032705+00:00",
+  "finished_utc": "2026-11-18T02:21:48.703463+00:00",
+  "host": "127.0.0.1",
+  "port": 8081,
+  "scope": "simulated mixed-client smoke",
+  "cases": [
+    {
+      "case": "eagler-755",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "eagler-777",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "gaius-777",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "vanilla-777",
+      "passed": true,
+      "exit_code": 0
+    }
+  ]
+}

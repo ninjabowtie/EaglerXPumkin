@@ -124,6 +124,24 @@ Multiversion (exact-777 configuration; its mismatch reply advertises protocol
 777). This is not a real graphical 1.17 gameplay test: no 1.17+ Eaglercraft
 client has been verified graphically yet; per-client matrix entries remain open.
 
+## Compatibility milestone evidence
+
+The [compatibility matrix](../tests/compatibility/README.md) inventories exact local
+client artifacts and records a simultaneous simulated-client run: Eagler 1.17,
+Eagler 26.3, Gaius tunnel 26.3, and vanilla TCP through the gateway. All four
+passed login, chunk, teleport, chat and keepalive checks. A subsequent recorded
+run kept all four connected for 120 seconds and verified reconnects with the
+same identities. Graphical older-client acceptance and longer soak measurements
+remain pending.
+
+With the documented Multiversion test route running, from `rust/`:
+
+```sh
+python3 tests/probe_compatibility.py --output-dir /tmp/compatibility-new-run
+```
+
+The runner saves JSON results and logs, and exits nonzero on a failed case.
+
 ## Server configuration and connecting
 
 For a standalone same-version setup without Multiversion, configure the Java

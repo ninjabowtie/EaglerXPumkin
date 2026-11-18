@@ -1,0 +1,16 @@
+chat marker received in packet 33
+{
+  "joined": true,
+  "position_acknowledged": true,
+  "chat_echo": true,
+  "keepalive_roundtrip": true,
+  "chunks": 117,
+  "registries": 32,
+  "minecraft_bytes": 7645479,
+  "transport": "vanilla",
+  "sustained": false,
+  "requested_seconds": 30,
+  "play_seconds": 15.131,
+  "keepalive_replies": 1,
+  "total_packets": 3817
+}

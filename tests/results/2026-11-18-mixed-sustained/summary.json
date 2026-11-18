@@ -1,0 +1,51 @@
+{
+  "started_utc": "2026-11-18T02:24:46.904731+00:00",
+  "finished_utc": "2026-11-18T02:27:03.369130+00:00",
+  "host": "127.0.0.1",
+  "port": 8081,
+  "scope": "simulated mixed-client sustained",
+  "requested_seconds": 120,
+  "reconnect": true,
+  "cases": [
+    {
+      "case": "eagler-755",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "eagler-777",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "gaius-777",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "vanilla-777",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "eagler-755-reconnect",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "eagler-777-reconnect",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "gaius-777-reconnect",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "case": "vanilla-777-reconnect",
+      "passed": true,
+      "exit_code": 0
+    }
+  ]
+}

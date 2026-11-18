@@ -14,6 +14,7 @@ and malformed-input coverage.
 """
 import argparse
 import collections
+from datetime import datetime, timezone
 import json
 import socket
 import struct
@@ -50,15 +51,18 @@ def recv_until_closed(client, max_seconds=5.0):
     (text_frames, binary_frames, closed) tuple."""
     text = binary = 0
     closed = False
-    client.sock.settimeout(max_seconds)
+    deadline = time.monotonic() + max_seconds
     try:
-        while True:
+        while time.monotonic() < deadline:
+            client.sock.settimeout(max(0.001, deadline - time.monotonic()))
             opcode, _ = client.receive_frame()
             if opcode == 1:
                 text += 1
             elif opcode == 2:
                 binary += 1
-    except (EOFError, ConnectionError, socket.timeout, OSError):
+    except socket.timeout:
+        pass  # A silent open socket is not evidence that the peer closed it.
+    except (EOFError, ConnectionError, OSError):
         closed = True
     return text, binary, closed
 
@@ -73,6 +77,8 @@ def motd_worker(host, port, deadline, stats, interval):
             client.sock.close()
             if not closed:
                 stats.fail("MOTD query connection was never closed by the gateway")
+            if not frames:
+                stats.fail("MOTD query returned no text frames")
             stats.add("motd_queries")
             stats.add("motd_frames", frames)
         except Exception as exc:  # noqa: BLE001 - soak must survive anything
@@ -132,14 +138,15 @@ def worker(index, host, port, deadline, stats):
         stats.add("finished")
 
 
-def fuzz_round(host, port, stats):
+def fuzz_round(host, port, stats, choice=None):
     """One malformed connection. The gateway must close it and stay healthy."""
     upgrade = (
         b"GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
         b"Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
         b"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
     )
-    choice = int(time.time() * 1000) % 6
+    choice = int(time.time() * 1000) % 6 if choice is None else choice
+    sock = None
     try:
         sock = socket.create_connection((host, port), timeout=5)
         sock.settimeout(5)
@@ -160,16 +167,24 @@ def fuzz_round(host, port, stats):
                 _send_masked(sock, 1, b"Accept: garbage")  # unsupported query
             else:
                 _send_masked(sock, 2, b"\x08")  # out-of-order login packet
-        text, binary, closed = _drain(sock)
-        sock.close()
+        received, closed = _drain(sock)
         if not closed:
             stats.fail(f"fuzz vector {choice} left its connection open")
         stats.add("fuzz_rounds")
-        stats.add("fuzz_frames", text + binary)
-    except (ConnectionError, socket.timeout, OSError):
-        # A reset peer is the expected close for most vectors.
-        stats.add("fuzz_rounds")
-        stats.add("fuzz_resets")
+        stats.add("fuzz_bytes", received)
+        stats.add(f"fuzz_vector_{choice}")
+    except socket.timeout:
+        stats.fail(f"fuzz vector {choice} timed out without a peer close")
+    except (ConnectionError, OSError) as exc:
+        if sock is None:
+            stats.fail(f"fuzz vector {choice} could not connect: {exc}")
+        else:
+            stats.add("fuzz_rounds")
+            stats.add("fuzz_resets")
+            stats.add(f"fuzz_vector_{choice}")
+    finally:
+        if sock is not None:
+            sock.close()
 
 
 def _send_masked(sock, opcode, payload):
@@ -183,32 +198,26 @@ def _send_masked(sock, opcode, payload):
     sock.sendall(header + mask + masked)
 
 
-def _drain(sock):
-    text = binary = 0
-    sock.settimeout(3)
+def _drain(sock, max_seconds=3.0):
+    """Drain raw rejection bytes until EOF/reset; a timeout is a failed close.
+
+    Input can contain an HTTP upgrade followed by WebSocket frames. Reading
+    raw bytes avoids interpreting HTTP headers as WebSocket packet lengths.
+    """
+    received = 0
+    deadline = time.monotonic() + max_seconds
     try:
-        while True:
-            header = sock.recv(2)
-            if len(header) < 2:
-                return text, binary, True
-            opcode = header[0] & 15
-            n = header[1] & 127
-            if n == 126:
-                n = struct.unpack(">H", sock.recv(2))[0]
-            elif n == 127:
-                n = struct.unpack(">Q", sock.recv(8))[0]
-            data = bytearray()
-            while len(data) < n:
-                part = sock.recv(n - len(data))
-                if not part:
-                    return text, binary, True
-                data.extend(part)
-            if opcode == 1:
-                text += 1
-            elif opcode == 2:
-                binary += 1
-    except (socket.timeout, ConnectionError, OSError):
-        return text, binary, True
+        while time.monotonic() < deadline:
+            sock.settimeout(max(0.001, deadline - time.monotonic()))
+            data = sock.recv(65536)
+            if not data:
+                return received, True
+            received += len(data)
+    except socket.timeout:
+        pass
+    except (ConnectionError, OSError):
+        return received, True
+    return received, False
 
 
 def main():
@@ -219,7 +228,11 @@ def main():
     parser.add_argument("--fuzz-clients", type=int, default=2)
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--motd-interval", type=float, default=5.0)
+    parser.add_argument("--json-output", help="save final counters and failures as JSON")
     args = parser.parse_args()
+    if args.seconds <= 0 or args.motd_interval <= 0 or args.clients < 0 or args.fuzz_clients < 0:
+        parser.error("durations must be positive and client counts nonnegative")
+    started_utc = datetime.now(timezone.utc).isoformat()
 
     stats = Stats()
     deadline = time.monotonic() + args.seconds
@@ -250,7 +263,7 @@ def main():
 
     started = time.monotonic()
     while time.monotonic() < deadline:
-        time.sleep(10)
+        time.sleep(min(10, max(0, deadline - time.monotonic())))
         counters, errors = stats.snapshot()
         print(f"soak {time.monotonic() - started:.0f}s: {json.dumps(counters)}")
         for error in errors[-3:]:
@@ -259,7 +272,14 @@ def main():
     for thread in threads:
         thread.join(timeout=args.seconds)
     counters, errors = stats.snapshot()
-    print(json.dumps({"final": counters, "errors": errors}, indent=2))
+    result = dict(started_utc=started_utc, finished_utc=datetime.now(timezone.utc).isoformat(),
+                  requested_seconds=args.seconds, clients=args.clients,
+                  fuzz_clients=args.fuzz_clients, host=args.host, port=args.port,
+                  final=counters, errors=errors, passed=not errors)
+    print(json.dumps(result, indent=2))
+    if args.json_output:
+        from pathlib import Path
+        Path(args.json_output).write_text(json.dumps(result, indent=2) + "\n")
     if errors:
         print(f"soak FAILED with {len(errors)} errors", file=sys.stderr)
         sys.exit(1)
@@ -267,8 +287,10 @@ def main():
 
 
 def _fuzz_loop(host, port, deadline, stats):
+    choice = 0
     while time.monotonic() < deadline:
-        fuzz_round(host, port, stats)
+        fuzz_round(host, port, stats, choice)
+        choice = (choice + 1) % 6
         time.sleep(2.0)
 
 

@@ -163,7 +163,13 @@ class GaiusClient(Client):
             framed = vi(len(data)) + zlib.compress(data)
         else:
             framed = b"\x00" + data
-        Client.send(self, vi(len(framed)) + framed)
+        self.send_stream(vi(len(framed)) + framed)
+
+    def send_stream(self, data):
+        Client.send(self, data)
+
+    def receive_stream(self):
+        return Client.receive(self)
 
     def receive(self):
         while True:
@@ -181,7 +187,7 @@ class GaiusClient(Client):
                         data = zlib.decompress(data)
                         assert len(data) == size
                 return data
-            self.input.extend(Client.receive(self))
+            self.input.extend(self.receive_stream())
 
     def login(self, name):
         self.send(b"\x00" + vi(777) + text("localhost") + struct.pack(">H", 25565) + b"\x02")
@@ -199,23 +205,65 @@ class GaiusClient(Client):
                 raise RuntimeError(f"Unexpected vanilla login packet: {packet!r}")
 
 
+class VanillaClient(GaiusClient):
+    """Vanilla TCP stream through the gateway's raw passthrough listener."""
+
+    def __init__(self, host, port):
+        self.input = bytearray()
+        self.compression = None
+        self.sock = socket.create_connection((host, port), timeout=5)
+        self.sock.settimeout(5)
+
+    def send_stream(self, data):
+        self.sock.sendall(data)
+
+    def receive_stream(self):
+        data = self.sock.recv(65536)
+        if not data:
+            raise EOFError("gateway disconnected")
+        return data
+
+
+def receive_before(client, deadline):
+    """Stop at the run deadline; earlier socket failures still fail the probe."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
+    client.sock.settimeout(remaining)
+    try:
+        return client.receive()
+    except socket.timeout:
+        if time.monotonic() >= deadline:
+            return None
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8081)
     parser.add_argument("--seconds", type=int, default=20)
-    parser.add_argument("--transport", choices=("eagler", "gaius"), default="eagler")
+    parser.add_argument("--name", default="PortProbe")
+    parser.add_argument("--sustain", action="store_true",
+                        help="keep the session alive for the full --seconds after login")
+    parser.add_argument("--transport", choices=("eagler", "gaius", "vanilla"), default="eagler")
+    parser.add_argument("--json-output", help="write successful play result as JSON")
     args = parser.parse_args()
-    client = (GaiusClient if args.transport == "gaius" else Client)(args.host, args.port)
+    if args.seconds <= 0:
+        parser.error("--seconds must be positive")
+    client = {"eagler": Client, "gaius": GaiusClient, "vanilla": VanillaClient}[args.transport](args.host, args.port)
     try:
-        registries = client.login("PortProbe")
+        registries = client.login(args.name)
         counts = collections.Counter()
-        chunks = bytes_received = 0
+        chunks = bytes_received = keepalive_replies = 0
         joined = positioned = chat_seen = keepalive = False
-        marker = f"gateway-probe-{int(time.time())}"
-        deadline = time.monotonic() + args.seconds
+        marker = f"gateway-probe-{args.name}-{time.time_ns()}"
+        started = time.monotonic()
+        deadline = started + args.seconds
         while time.monotonic() < deadline:
-            p = client.receive()
+            p = receive_before(client, deadline)
+            if p is None:
+                break
             bytes_received += len(p)
             packet, offset = read_vi(p)
             counts[packet] += 1
@@ -241,17 +289,24 @@ def main():
             elif packet == 45:
                 client.send(b"\x1c" + p[offset:])
                 keepalive = True
+                keepalive_replies += 1
             elif packet in (33, 66, 124):
                 chat_seen |= marker.encode() in p
             elif packet == 32:  # disconnect
                 raise RuntimeError(f"play disconnected: {p!r}")
-            if joined and positioned and chunks and chat_seen and keepalive:
+            if not args.sustain and joined and positioned and chunks and chat_seen and keepalive:
                 break
         result = dict(joined=joined, position_acknowledged=positioned, chat_echo=chat_seen,
                       keepalive_roundtrip=keepalive, chunks=chunks, registries=registries,
-                      minecraft_bytes=bytes_received, transport=args.transport)
+                      minecraft_bytes=bytes_received, transport=args.transport,
+                      sustained=args.sustain, requested_seconds=args.seconds,
+                      play_seconds=round(time.monotonic() - started, 3),
+                      keepalive_replies=keepalive_replies, total_packets=sum(counts.values()))
         print(json.dumps(result, indent=2))
         assert joined and positioned and chunks and chat_seen and keepalive, result
+        if args.json_output:
+            from pathlib import Path
+            Path(args.json_output).write_text(json.dumps(result, indent=2) + "\n")
     finally:
         client.sock.close()
 

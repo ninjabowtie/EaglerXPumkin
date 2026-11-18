@@ -1,0 +1,22 @@
+{
+  "repository_commit": "51a7e07c4bbe1461d8f3f65bfe73a7389f7bae4b",
+  "working_tree": "uncommitted changes; probe script hashes below identify tested source",
+  "python_version": "Python 3.14.8",
+  "source_sha256": {
+    "rust/tests/probe_compatibility.py": "eeb0d834d623334ba88a8c64dd0e4056754eba854c70d858828d4fc88207205b",
+    "rust/tests/probe_1_17.py": "1ced3cce23bada269454e3ee736e441edda67ac6240c5ff783fef25815a0bc97",
+    "rust/tests/probe_26_3.py": "ef69038e5fdb898fbb410fe86a3ddcb4f77bbc5153b1e5c0b37d9d46c5ee65fa",
+    "rust/tests/soak_26_3.py": "6dc26fe0df64ef7610960269a505962f196e5a2b6b45320d330178bd092de21c"
+  },
+  "route": "gateway 127.0.0.1:8081 -> translator :25565 -> Pumpkin :25566 (existing test setup)",
+  "pumpkin_release": "0.2.2+26.3-26.60 per existing startup log",
+  "gateway_binary_sha256": null,
+  "translation_release": null,
+  "translation_binary_sha256": null,
+  "limitations": [
+    "No browser host available",
+    "Running gateway was not rebuilt/reloaded",
+    "Running translator release and binary hash not independently established",
+    "Listener-health/fuzz phase followed sustained sessions; it did not overlap them"
+  ]
+}

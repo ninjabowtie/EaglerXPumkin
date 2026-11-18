@@ -113,12 +113,16 @@ check that Multiversion accepts connections and its forwarding setup check
 passes. Connect Java/Gaius clients using port 25565; the WebSocket address
 remains `ws://127.0.0.1:8081/`.
 
-Local verification with Multiversion 0.6.1 completed a Minecraft 1.17
-(protocol 755) TCP login translated to 26.3, plus the existing 26.3 Eagler and
-Gaius probes through the proxy. This is not a full 1.17 graphical gameplay test.
-Gateway-side negotiation and per-version Login Start construction for 1.17+
-protocols are implemented and unit-tested, but no 1.17+ Eaglercraft client has
-been verified graphically yet; per-client matrix entries remain open.
+Local verification with Multiversion 0.6.1 covered a simulated Minecraft 1.17
+(protocol 755) Eagler play flow through the proxy — join, teleport
+acknowledgement, keepalive round trip, chunk data and chat echo — plus
+negotiation checks: the highest client-offered protocol is selected (offering
+755/776/777 selects 777, offering 755/776 selects 776) and out-of-range offers
+receive the mismatch packet. The existing 26.3 Eagler and Gaius probes still
+pass through the proxy and were re-run against a standalone backend without
+Multiversion (exact-777 configuration; its mismatch reply advertises protocol
+777). This is not a real graphical 1.17 gameplay test: no 1.17+ Eaglercraft
+client has been verified graphically yet; per-client matrix entries remain open.
 
 ## Server configuration and connecting
 

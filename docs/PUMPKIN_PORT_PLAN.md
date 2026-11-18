@@ -63,8 +63,15 @@ remain deferred separately.
   client/build, Minecraft protocol, Eagler handshake version, transport,
   Pumpkin release, translation component/version, test date and result.
 - [x] Select Multiversion as the companion translation dependency and document
-  the loopback proxy setup. Local Multiversion 0.6.1 verification covered a 1.17
-  TCP login and the existing 26.3 Eagler/Gaius probes through the proxy.
+  the loopback proxy setup. Local Multiversion 0.6.1 verification covered a
+  simulated 1.17 (protocol 755) Eagler play flow through the proxy — join,
+  teleport acknowledgement, keepalive round trip, chunk data and chat echo —
+  plus negotiation checks: the highest client-offered protocol is selected
+  (offering 755/776/777 selects 777, offering 755/776 selects 776) and
+  out-of-range offers receive the mismatch packet naming the accepted range.
+  The existing 26.3 Eagler/Gaius probes still pass through the proxy and were
+  re-run against a standalone backend without Multiversion (exact-777
+  configuration; its mismatch reply advertises protocol 777).
 - [ ] Validate a real 1.17+ Eaglercraft client whose game protocol differs from
   the current backend; the TCP login check alone does not meet this milestone.
 - [x] Implement version negotiation and routing with explicit supported-version

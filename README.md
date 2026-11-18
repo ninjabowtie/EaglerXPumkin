@@ -7,6 +7,34 @@ Tested with **Pumpkin 0.2.2+26.3-26.60** and **Gaius 26.3 portable
 v0.4.0-c263**: world loading, movement, text chat, breaking and placing blocks
 work in the browser. The gateway also implements the Eagler handshake transport.
 
+## Companion plugin: Multiversion
+
+Install [Multiversion](https://market.pumpkinmc.org/plugin/s7e5Nz2f-multiversion) alongside
+EaglerXPumpkin for the intended multi-version server setup. EaglerXPumpkin
+relies on Multiversion for Minecraft protocol translation when accepting
+1.17+ client protocols. EaglerXPumpkin handles WebSocket/Eagler transport,
+negotiation and login; Multiversion translates the Minecraft stream for
+Pumpkin.
+
+See the [companion setup](rust/README.md#multiversion-companion-setup) for routing
+and configuration. The gateway now negotiates client protocols inside the
+configured range, but no 1.17+ Eaglercraft client has been verified graphically
+yet; per-client testing and matrix entries remain open. The existing
+same-version gateway can still run on its own.
+
+## Client support status
+
+The gateway negotiates **Eaglercraft clients for Minecraft 1.17 and newer**
+when `min_minecraft_protocol`/`max_minecraft_protocol` are configured: it picks
+the highest client-offered protocol in the range and injects the
+version-correct login packet. This does not yet mean every 1.17+ client works
+end to end: compatibility depends on Multiversion translating the client's
+protocol for Pumpkin, and each client build still needs graphical
+verification before being called supported. The currently verified graphical
+scope remains the 26.3 setup above. See the
+[1.17+ compatibility plan](docs/PUMPKIN_PORT_PLAN.md#planned-eaglercraft-117-client-support)
+for translation requirements, milestones and acceptance checks.
+
 ## Build
 
 Install stable Rust and the WASI Preview 2 target, then run from the repository root:

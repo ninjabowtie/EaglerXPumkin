@@ -3,7 +3,15 @@ backend_port = 25565
 listen_address = "0.0.0.0"
 backend_address = "127.0.0.1"
 server_address = "localhost"
+# Exact Minecraft protocol to accept when no range is configured.
+# 777 is Minecraft 26.3, the default standalone setup.
 minecraft_protocol = 777
+# Optional inclusive range of accepted client protocols. With Multiversion as
+# the translation proxy, this admits Eaglercraft clients for Minecraft 1.17+
+# (protocol 755) through the newest release. Both fields must be set together.
+# Leave both unset for the exact-protocol-only default above.
+# min_minecraft_protocol = 755
+# max_minecraft_protocol = 777
 max_connections = 64
 connections_per_minute = 30
 diagnostics_interval_secs = 60

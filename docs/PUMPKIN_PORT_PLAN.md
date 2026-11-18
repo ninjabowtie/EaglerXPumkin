@@ -16,6 +16,81 @@ original plan's remaining work.
 
 See [setup and verification](../rust/README.md) for commands and tested scope.
 
+## Planned Eaglercraft 1.17+ client support
+
+The next compatibility goal is Eaglercraft clients targeting **Minecraft 1.17
+and newer**, while retaining the current Pumpkin 26.3 backend and its verified
+connection paths. Protocol negotiation and version-correct login injection for
+1.17+ are implemented; end-to-end client support still depends on the
+Multiversion translation path and per-client verification, so individual
+versions are not yet marked supported. This does not imply that a compatible
+Eaglercraft build exists for every Minecraft release, or that every client at
+or above 1.17 is supported automatically. Support will be recorded for exact
+client builds, Minecraft protocol versions and Pumpkin releases after testing.
+Clients below 1.17, including the original 1.8/1.12 targets and Rewind 1.5.2,
+remain deferred separately.
+
+### Compatibility design
+
+- Treat the Eagler handshake version and the Minecraft game protocol as separate
+  compatibility decisions. A successful WebSocket upgrade or Eagler handshake
+  alone does not establish gameplay compatibility.
+- Inventory available 1.17+ client builds and capture their handshake, login,
+  profile and capability exchanges. Preserve the initial offline identity when
+  nickname selection is disabled, and test empty nickname fields as well as
+  explicit names. Advertise only implemented Eagler capabilities.
+- Rely on [Multiversion](https://market.pumpkinmc.org/plugin/s7e5Nz2f-multiversion) as the
+  companion plugin for Minecraft protocol translation. Install it alongside
+  EaglerXPumpkin and route the gateway's loopback backend through its listener.
+  EaglerXPumpkin owns WebSocket/Eagler transport, identity and negotiation;
+  Multiversion owns translation to the Pumpkin backend. Maintain this dependency
+  when implementing 1.17+ support and validate compatible plugin releases.
+- Keep the client's selected protocol distinct from the backend protocol.
+  Translation must cover packet IDs and payloads, registries, chunks, entity
+  metadata, inventory, chat, and login/configuration state differences as
+  applicable. Changing a protocol number or adding an enum variant is not
+  sufficient.
+- Adapt Eagler login injection, compression and play packet handling to the
+  selected translation boundary. Validate `/tunnel` independently: its raw
+  Minecraft stream still needs a compatible backend or translation path.
+- Reject unsupported versions with an actionable compatibility message before
+  attempting gameplay. Keep the existing loopback destination restriction,
+  resource limits and address policies when introducing a translation route.
+
+### Milestones and acceptance
+
+- [ ] Inventory exact 1.17+ Eaglercraft builds and establish a version matrix:
+  client/build, Minecraft protocol, Eagler handshake version, transport,
+  Pumpkin release, translation component/version, test date and result.
+- [x] Select Multiversion as the companion translation dependency and document
+  the loopback proxy setup. Local Multiversion 0.6.1 verification covered a 1.17
+  TCP login and the existing 26.3 Eagler/Gaius probes through the proxy.
+- [ ] Validate a real 1.17+ Eaglercraft client whose game protocol differs from
+  the current backend; the TCP login check alone does not meet this milestone.
+- [x] Implement version negotiation and routing with explicit supported-version
+  checks, initial-identity regression coverage and clear disconnect reasons.
+  The gateway selects the highest client-offered protocol inside the configured
+  `min_minecraft_protocol`/`max_minecraft_protocol` range, injects the
+  version-correct Login Start packet for each 1.17+ protocol generation
+  (1.17-1.18.2, 1.19, 1.19.2, 1.19.3-1.20.1, 1.20.2+), sends Login
+  Acknowledged for 1.20.2+ backends, and answers unsupported clients with a
+  mismatch packet naming the accepted protocols. Translation routing is
+  delegated to Multiversion via the loopback backend.
+- [ ] Add automated handshake and packet/state transition regressions for each
+  admitted protocol, including malformed requests and unsupported versions.
+  Partial: Login Start construction, protocol selection and the mismatch reply
+  are unit-tested per protocol generation; packet and state coverage for live
+  1.17+ streams is still pending real-client verification.
+- [ ] Verify each candidate with a real graphical client: offline login, world
+  and chunk loading, movement/teleports, chat, inventory, block breaking and
+  placement, entity interaction, keepalives, disconnect and reconnect. Check
+  skins and optional UI features only where advertised.
+- [ ] Run mixed-client sessions and sustained tests alongside the existing
+  26.3 probes; retain Gaius tunnel and vanilla TCP regression checks.
+- [ ] Publish tested matrix entries and installation instructions before marking
+  individual versions supported. Add subsequent 1.17+ protocols incrementally;
+  do not label the whole version range supported based on one passing client.
+
 ## Implemented architecture
 
 - Build `EaglerXPumpkin.wasm` for `wasm32-wasip2` with the pinned Pumpkin v0.1 API.
@@ -116,7 +191,7 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 ### Phase 3 - ecosystem addons
 
 - [ ] EaglerWeb file hosting. Deferred; not needed for the first release.
-- [ ] EaglerXRewind 1.5.2 support. Deferred with older-client support.
+- [ ] EaglerXRewind 1.5.2 support. Deferred separately from the planned 1.17+ work.
 - [ ] Supervisor, telemetry, update checker and marketplace metadata. Not
   planned for this port.
 
@@ -148,9 +223,9 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - Port optional Eagler features as needed: notifications and pause menu
   extensions. Advertise capabilities only when their implementation is
   available.
-- Evaluate older Minecraft client support separately. Pumpkin's old version
-  enum variants do not provide translation; older clients need a translation
-  layer and their own end-to-end validation.
+- Deliver the [planned 1.17+ Eaglercraft compatibility work](#planned-eaglercraft-117-client-support)
+  incrementally, relying on Multiversion and a tested client matrix.
+  Pre-1.17 support remains deferred.
 
 ## Out of scope
 

@@ -559,11 +559,13 @@ impl Runtime {
             .map_err(io::Error::other)?;
         let listener = TcpListener::bind(config.listen_addr())?;
         listener.set_nonblocking(true)?;
+        let (min_protocol, max_protocol) = config.minecraft_protocol_range();
         info!(
-            "Eagler listener on {} -> {} (MC protocol {}, {} connections/minute per address)",
+            "Eagler listener on {} -> {} (MC protocols {}-{}, {} connections/minute per address)",
             listener.local_addr()?,
             config.backend_addr(),
-            config.minecraft_protocol,
+            min_protocol,
+            max_protocol,
             if config.connections_per_minute == 0 {
                 "unlimited".to_string()
             } else {

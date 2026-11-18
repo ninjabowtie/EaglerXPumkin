@@ -14,7 +14,16 @@ pub struct Config {
     pub listen_address: IpAddr,
     pub backend_address: IpAddr,
     pub server_address: String,
+    /// Exact Minecraft protocol to accept, used when no protocol range is
+    /// configured. Defaults to 777 (Minecraft 26.3) for standalone installs.
     pub minecraft_protocol: u16,
+    /// Optional inclusive lower bound of accepted Minecraft protocols. Both
+    /// bounds must be set together; they override `minecraft_protocol`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_minecraft_protocol: Option<u16>,
+    /// Optional inclusive upper bound of accepted Minecraft protocols.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_minecraft_protocol: Option<u16>,
     pub max_connections: usize,
     pub connections_per_minute: u32,
     pub diagnostics_interval_secs: u64,
@@ -42,6 +51,8 @@ impl Default for Config {
             backend_address: Ipv4Addr::LOCALHOST.into(),
             server_address: "localhost".into(),
             minecraft_protocol: 777, // Minecraft 26.3
+            min_minecraft_protocol: None,
+            max_minecraft_protocol: None,
             max_connections: 64,
             connections_per_minute: 30,
             diagnostics_interval_secs: 60,
@@ -94,6 +105,35 @@ impl Config {
             && (self.listen_address.is_unspecified() || self.listen_address == self.backend_address)
         {
             return Err("listener and backend must use different addresses/ports".into());
+        }
+        match (self.min_minecraft_protocol, self.max_minecraft_protocol) {
+            (None, None) => {}
+            (Some(min), Some(max)) => {
+                const OLDEST: u16 = 755; // Minecraft 1.17, oldest supported layout
+                if min == 0 || max == 0 {
+                    return Err(
+                        "min_minecraft_protocol and max_minecraft_protocol must be nonzero".into(),
+                    );
+                }
+                if min < OLDEST || max < OLDEST {
+                    return Err(format!(
+                        "Minecraft protocols below {OLDEST} (1.17) are unsupported; \
+                         set min_minecraft_protocol and max_minecraft_protocol to 755 or newer"
+                    ));
+                }
+                if min > max {
+                    return Err(
+                        "min_minecraft_protocol must not exceed max_minecraft_protocol".into(),
+                    );
+                }
+            }
+            _ => {
+                return Err(
+                    "min_minecraft_protocol and max_minecraft_protocol must both be set \
+                     or both be omitted"
+                        .into(),
+                );
+            }
         }
         if self.max_connections == 0 || self.max_connections > 256 {
             return Err("max_connections must be between 1 and 256".into());
@@ -156,8 +196,9 @@ impl Config {
         }
         if !self.motd_frames.is_empty() {
             if self.motd_interval_ms == 0 {
-                return Err("motd_interval_ms must be between 1 and 60000 when motd_frames is set"
-                    .into());
+                return Err(
+                    "motd_interval_ms must be between 1 and 60000 when motd_frames is set".into(),
+                );
             }
             if self.motd_close_after_ms == 0 {
                 return Err(
@@ -177,6 +218,14 @@ impl Config {
     }
     pub fn backend_addr(&self) -> SocketAddr {
         SocketAddr::new(self.backend_address, self.backend_port)
+    }
+    /// Inclusive range of accepted Minecraft protocols. With no range
+    /// configured this is exactly `minecraft_protocol`.
+    pub fn minecraft_protocol_range(&self) -> (u16, u16) {
+        match (self.min_minecraft_protocol, self.max_minecraft_protocol) {
+            (Some(min), Some(max)) => (min, max),
+            _ => (self.minecraft_protocol, self.minecraft_protocol),
+        }
     }
     pub fn pause_menu(&self) -> Option<(&str, &str)> {
         (!self.pause_menu_button.is_empty())
@@ -216,6 +265,33 @@ mod tests {
         assert!(config.ip_allowlist.is_empty());
         assert!(config.ip_blocklist.is_empty());
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn minecraft_protocol_range_is_validated_and_defaults_to_exact() {
+        // Default: no range, exact protocol only.
+        let config = Config::default();
+        assert_eq!(config.minecraft_protocol_range(), (777, 777));
+        config.validate().unwrap();
+
+        let config: Config =
+            toml::from_str("min_minecraft_protocol = 755\nmax_minecraft_protocol = 777").unwrap();
+        assert_eq!(config.minecraft_protocol_range(), (755, 777));
+        config.validate().unwrap();
+
+        // Half a range is rejected, as is an inverted or too-old range.
+        for bad in [
+            "min_minecraft_protocol = 755",
+            "max_minecraft_protocol = 777",
+            "min_minecraft_protocol = 778\nmax_minecraft_protocol = 777",
+            "min_minecraft_protocol = 0\nmax_minecraft_protocol = 777",
+            "min_minecraft_protocol = 754\nmax_minecraft_protocol = 777",
+            "min_minecraft_protocol = 755\nmax_minecraft_protocol = 0",
+            "min_minecraft_protocol = 755\nmax_minecraft_protocol = 754",
+        ] {
+            let config: Config = toml::from_str(bad).unwrap();
+            assert!(config.validate().is_err(), "{bad}");
+        }
     }
 
     #[test]

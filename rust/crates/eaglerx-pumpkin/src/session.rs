@@ -41,6 +41,7 @@ pub struct Session {
     version: u16,
     protocol: u16,
     username: String,
+    handshake_username: Option<String>,
     uuid: [u8; 16],
     codec: Codec,
     profiles: HashSet<String>,
@@ -63,6 +64,7 @@ impl Default for Session {
             version: 0,
             protocol: 0,
             username: String::new(),
+            handshake_username: None,
             uuid: [0; 16],
             codec: Codec::default(),
             profiles: HashSet::new(),
@@ -117,6 +119,99 @@ fn optional_capabilities(cfg: &Config) -> u32 {
         caps |= ui::CAP_NOTIFICATION;
     }
     caps
+}
+
+/// Display names for the accepted Minecraft protocol range. Protocols outside
+/// the table label by number alone.
+fn minecraft_protocol_name(protocol: u16) -> Option<&'static str> {
+    match protocol {
+        755 => Some("1.17"),
+        756 => Some("1.17.1"),
+        757 => Some("1.18"),
+        758 => Some("1.18.2"),
+        759 => Some("1.19"),
+        760 => Some("1.19.2"),
+        761 => Some("1.19.3"),
+        762 => Some("1.19.4"),
+        763 => Some("1.20/1.20.1"),
+        764 => Some("1.20.2"),
+        765 => Some("1.20.3/1.20.4"),
+        766 => Some("1.20.5/1.20.6"),
+        767 => Some("1.21/1.21.1"),
+        768 => Some("1.21.2/1.21.3"),
+        769 => Some("1.21.4"),
+        770 => Some("1.21.5"),
+        771 => Some("1.21.6"),
+        772 => Some("1.21.7/1.21.8"),
+        773 => Some("1.21.9/1.21.10"),
+        774 => Some("1.21.11"),
+        775 => Some("26.1"),
+        776 => Some("26.2"),
+        777 => Some("26.3"),
+        _ => None,
+    }
+}
+
+/// The actionable message carried by the mismatch packet, e.g.
+/// "Use a Minecraft 1.17-26.3 Eaglercraft client (protocols 755-777)".
+fn mismatch_message(min: u16, max: u16) -> String {
+    let versions = match (
+        minecraft_protocol_name(min),
+        minecraft_protocol_name(max),
+        min == max,
+    ) {
+        (Some(name), _, true) => name.to_string(),
+        (Some(min_name), Some(max_name), false) => format!("{min_name}-{max_name}"),
+        _ => format!("protocol {min}-{max}"),
+    };
+    let protocols = if min == max {
+        format!(" (protocol {min})")
+    } else {
+        format!(" (protocols {min}-{max})")
+    };
+    format!("Use a Minecraft {versions} Eaglercraft client{protocols}")
+}
+
+/// Build the handshake-version mismatch packet (id 0x03): the Eagler versions
+/// this server speaks, the accepted Minecraft protocols (min and max when they
+/// differ), and the actionable message. Ported from
+/// WebSocketEaglerInitialHandler's incompatibility reply.
+fn mismatch_packet(cfg: &Config) -> Vec<u8> {
+    let (min, max) = cfg.minecraft_protocol_range();
+    let mut packet = vec![3];
+    packet.extend_from_slice(&1u16.to_be_bytes()); // supported Eagler versions
+    packet.extend_from_slice(&5u16.to_be_bytes());
+    if min == max {
+        packet.extend_from_slice(&1u16.to_be_bytes());
+        packet.extend_from_slice(&min.to_be_bytes());
+    } else {
+        packet.extend_from_slice(&2u16.to_be_bytes());
+        packet.extend_from_slice(&min.to_be_bytes());
+        packet.extend_from_slice(&max.to_be_bytes());
+    }
+    ascii(&mut packet, &mismatch_message(min, max));
+    packet
+}
+
+/// Append the version-specific Login Start fields after the username, per the
+/// wiki.vg 1.17+ layouts: 1.19 adds a signature-data flag, 1.19.2 adds that
+/// flag plus the optional player UUID, 1.19.3-1.20.1 keep the optional UUID
+/// behind its own flag, and 1.20.2+ carry an unconditional UUID.
+fn login_start(out: &mut Vec<u8>, protocol: u16, uuid: &[u8; 16]) {
+    match protocol {
+        755..=758 => {}     // username only
+        759 => out.push(0), // has_signature_data = false
+        760 => {
+            out.push(0); // has_signature_data = false
+            out.push(1); // has_player_uuid = true
+            out.extend_from_slice(uuid);
+        }
+        761..=763 => {
+            out.push(1); // has_player_uuid = true
+            out.extend_from_slice(uuid);
+        }
+        _ => out.extend_from_slice(uuid), // 1.20.2+: required player UUID
+    }
 }
 
 impl Session {
@@ -281,25 +376,34 @@ impl Session {
                 if !(1..=16).contains(&count) {
                     return Err("invalid Minecraft version count".into());
                 }
+                // Accept the highest client-offered protocol inside the
+                // configured range, matching EaglerXServer's selection.
+                let (min_protocol, max_protocol) = cfg.minecraft_protocol_range();
+                let mut protocol = 0;
                 for _ in 0..count {
-                    if r.short()? == cfg.minecraft_protocol {
-                        self.protocol = cfg.minecraft_protocol;
+                    let offered = r.short()?;
+                    if (min_protocol..=max_protocol).contains(&offered) {
+                        protocol = protocol.max(offered);
                     }
                 }
+                self.protocol = protocol;
                 let _brand = r.ascii()?;
                 let _version = r.ascii()?;
                 let _auth = r.byte()?;
                 let len = r.byte()? as usize;
-                r.take(len)?;
+                let identity = r.take(len)?;
+                if !identity.is_empty() {
+                    self.handshake_username = Some(
+                        String::from_utf8(identity.to_vec())
+                            .map_err(|_| "invalid handshake username")?,
+                    );
+                }
                 r.end()?;
                 if self.version == 0
                     || self.protocol == 0
                     || (self.protocol > 340 && self.version < 5)
                 {
-                    let mut packet = vec![3, 0, 1, 0, 5, 0, 1];
-                    packet.extend_from_slice(&cfg.minecraft_protocol.to_be_bytes());
-                    ascii(&mut packet, "Use a Minecraft 26.3 Eaglercraft client");
-                    self.send(packet);
+                    self.send(mismatch_packet(cfg));
                     self.closing = true;
                     return Ok(());
                 }
@@ -316,7 +420,13 @@ impl Session {
                 self.stage = Stage::Request;
             }
             (Stage::Request, 4) => {
-                let username = r.ascii()?;
+                let requested_username = r.ascii()?;
+                // With nickname selection disabled, use the initial identity,
+                // matching EaglerXServer. Legacy clients supply only a nickname.
+                let username = self
+                    .handshake_username
+                    .clone()
+                    .unwrap_or(requested_username);
                 if username.is_empty()
                     || username.len() > 16
                     || !username
@@ -367,12 +477,7 @@ impl Session {
                 self.send_backend(&handshake)?;
                 let mut login = vec![0];
                 mc::string(&mut login, &self.username);
-                if (759..=760).contains(&self.protocol) {
-                    login.push(0);
-                }
-                if self.protocol >= 760 {
-                    login.extend_from_slice(&self.uuid);
-                }
+                login_start(&mut login, self.protocol, &self.uuid);
                 self.send_backend(&login)?;
                 self.connect_requested = true;
                 self.stage = Stage::BackendLogin;
@@ -615,6 +720,188 @@ mod tests {
         );
         (session, cfg, store)
     }
+    #[test]
+    fn initial_identity_is_used_when_nickname_selection_is_disabled() {
+        for requested in ["", "OtherName"] {
+            let mut session = Session::default();
+            let cfg = Config::default();
+            let mut store = SkinStore::default();
+            client(
+                &mut session,
+                &cfg,
+                &mut store,
+                b"\x01\x02\x00\x01\x00\x05\x00\x01\x03\x09\x04Test\x01x\x00\x05guest",
+            );
+            let mut request = vec![4];
+            ascii(&mut request, requested);
+            ascii(&mut request, "default");
+            request.extend_from_slice(&[0, 0, 0, 0, 0]);
+            client(&mut session, &cfg, &mut store, &request);
+            assert_eq!(session.username, "guest");
+            assert!(session.connect_requested);
+        }
+    }
+
+    #[test]
+    fn login_start_matches_each_protocol_generation() {
+        let uuid = [0xab; 16];
+        let mut username = Vec::new();
+        mc::string(&mut username, "Test");
+        let with_uuid = |prefix: &[u8]| {
+            let mut expected = username.clone();
+            expected.extend_from_slice(prefix);
+            expected.extend_from_slice(&uuid);
+            expected
+        };
+        let cases = [
+            (755, username.clone()),
+            (758, username.clone()),
+            (759, {
+                let mut expected = username.clone();
+                expected.push(0); // has_signature_data = false
+                expected
+            }),
+            (760, with_uuid(&[0, 1])), // has_sig = false, has_uuid = true
+            (761, with_uuid(&[1])),
+            (763, with_uuid(&[1])),
+            (764, with_uuid(&[])), // 1.20.2+: unconditional UUID
+            (777, with_uuid(&[])),
+        ];
+        for (protocol, expected) in cases {
+            let mut out = username.clone();
+            login_start(&mut out, protocol, &uuid);
+            assert_eq!(out, expected, "Login Start for protocol {protocol}");
+        }
+    }
+
+    #[test]
+    fn mismatch_packet_advertises_the_configured_protocol_range() {
+        // Default config advertises exactly Minecraft 26.3.
+        let packet = mismatch_packet(&Config::default());
+        assert_eq!(&packet[..9], &[3, 0, 1, 0, 5, 0, 1, 0x03, 0x09]);
+        let length = packet[9] as usize;
+        let message = std::str::from_utf8(&packet[10..10 + length]).unwrap();
+        assert_eq!(
+            message,
+            "Use a Minecraft 26.3 Eaglercraft client (protocol 777)"
+        );
+        assert!(packet.len() == 10 + length);
+
+        // A configured range advertises both bounds and actionable guidance.
+        let cfg = cfg_range(Some(755), Some(777));
+        let packet = mismatch_packet(&cfg);
+        assert_eq!(
+            &packet[..11],
+            &[3, 0, 1, 0, 5, 0, 2, 0x02, 0xf3, 0x03, 0x09]
+        );
+        let length = packet[11] as usize;
+        let message = std::str::from_utf8(&packet[12..12 + length]).unwrap();
+        assert_eq!(
+            message,
+            "Use a Minecraft 1.17-26.3 Eaglercraft client (protocols 755-777)"
+        );
+        assert!(packet.len() == 12 + length);
+    }
+
+    /// A config with an explicit protocol range (or none, for the exact
+    /// `minecraft_protocol` default).
+    fn cfg_range(min: Option<u16>, max: Option<u16>) -> Config {
+        let cfg = Config {
+            min_minecraft_protocol: min,
+            max_minecraft_protocol: max,
+            ..Config::default()
+        };
+        cfg.validate().unwrap();
+        cfg
+    }
+
+    /// A V5 handshake packet offering `versions` as the Minecraft protocols.
+    fn handshake(versions: &[u16]) -> Vec<u8> {
+        let mut packet = vec![1, 2];
+        packet.extend_from_slice(&1u16.to_be_bytes()); // one Eagler version
+        packet.extend_from_slice(&5u16.to_be_bytes()); // handshake v5
+        packet.extend_from_slice(&(versions.len() as u16).to_be_bytes());
+        for version in versions {
+            packet.extend_from_slice(&version.to_be_bytes());
+        }
+        ascii(&mut packet, "Test"); // brand
+        ascii(&mut packet, "x"); // client version
+        packet.push(0); // no authentication
+        packet.push(0); // empty initial identity
+        packet
+    }
+
+    #[test]
+    fn negotiates_the_highest_offered_protocol_inside_the_range() {
+        for (min, max, offered, selected) in [
+            (Some(755), Some(777), vec![755, 760, 777, 754], 777),
+            (Some(755), Some(777), vec![755], 755),
+            (Some(755), Some(760), vec![755, 760, 777], 760),
+            (None, None, vec![777], 777),
+        ] {
+            let cfg = cfg_range(min, max);
+            let mut session = Session::default();
+            let mut store = SkinStore::default();
+            client(&mut session, &cfg, &mut store, &handshake(&offered));
+            let reply = session.client_output.pop().unwrap().payload;
+            assert_eq!(
+                &reply[..5],
+                &[2, 0, 5, (selected >> 8) as u8, selected as u8],
+                "server version packet for {selected}"
+            );
+            assert_eq!(session.protocol, selected);
+        }
+    }
+
+    #[test]
+    fn login_start_uses_the_selected_protocol_from_the_range() {
+        let cfg = cfg_range(Some(755), Some(760));
+        let mut session = Session::default();
+        let mut store = SkinStore::default();
+        client(&mut session, &cfg, &mut store, &handshake(&[755, 760, 777]));
+        assert_eq!(session.protocol, 760);
+        client(
+            &mut session,
+            &cfg,
+            &mut store,
+            b"\x04\x04Test\x07default\x00\x00\x00\x00\x00",
+        );
+        let mut backend = Codec::default();
+        backend
+            .push(&std::mem::take(&mut session.backend_output))
+            .unwrap();
+        let handshake_packet = backend.next_packet().unwrap().unwrap();
+        let mut backend_reader = Reader::new(&handshake_packet);
+        assert_eq!(backend_reader.byte().unwrap(), 0); // handshake
+        assert_eq!(backend_reader.int().unwrap(), 760); // selected protocol
+        let login = backend.next_packet().unwrap().unwrap();
+        let mut expected = vec![0];
+        mc::string(&mut expected, "Test");
+        expected.extend_from_slice(&[0, 1]); // has_sig = false, has_uuid = true
+        expected.extend_from_slice(&session.uuid);
+        assert_eq!(login, expected);
+    }
+
+    #[test]
+    fn protocol_outside_the_configured_range_receives_the_range_mismatch() {
+        let cfg = cfg_range(Some(755), Some(760));
+        let mut session = Session::default();
+        let mut store = SkinStore::default();
+        client(&mut session, &cfg, &mut store, &handshake(&[777]));
+        assert!(session.closing);
+        let packet = session.client_output.pop().unwrap().payload;
+        assert_eq!(packet[0], 3);
+        assert_eq!(
+            &packet[..11],
+            &[3, 0, 1, 0, 5, 0, 2, 0x02, 0xf3, 0x02, 0xf8]
+        );
+        let length = packet[11] as usize;
+        assert_eq!(
+            std::str::from_utf8(&packet[12..12 + length]).unwrap(),
+            mismatch_message(755, 760)
+        );
+    }
+
     #[test]
     fn backend_login_waits_for_client_finish_before_replaying_configuration() {
         let (mut session, cfg, mut store) = start();

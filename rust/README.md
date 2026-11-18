@@ -25,6 +25,27 @@ Two transports share port 8081:
 Unmodified vanilla TCP connections on the gateway port are also relayed to the
 same backend. Normal Java clients can still use Pumpkin's own port.
 
+## 1.17+ client negotiation
+
+The gateway negotiates Minecraft versions with Eaglercraft clients: it selects
+the highest client-offered protocol inside the configured
+`min_minecraft_protocol`/`max_minecraft_protocol` range (see
+[eagler.example.toml](eagler.example.toml)), injects the version-correct Login
+Start packet for 1.17 through the newest release, and rejects unsupported
+clients with a mismatch packet that names the accepted protocols. With both
+fields unset, only `minecraft_protocol` (default 777, Minecraft 26.3) is
+accepted, which keeps standalone installs on the verified setup.
+
+Accepting 1.17+ clients still requires a translation layer: the backend must
+translate the client's protocol to Pumpkin's, which is the job of
+[Multiversion](#multiversion-companion-setup) in this setup. Each exact client
+build and protocol still needs verification with a real graphical client before
+it can be called supported; see the
+[roadmap](../docs/PUMPKIN_PORT_PLAN.md#planned-eaglercraft-117-client-support)
+for the pending matrix entries. Eagler handshake versions and Minecraft game
+protocols are separate compatibility decisions, and the raw `/tunnel`
+transport carries whatever Minecraft stream the client sends.
+
 ## Build and install
 
 Install stable Rust (tested with 1.100.0) and the WASI target:
@@ -46,9 +67,63 @@ this pinned API. The runtime retains its listener and connections and polls
 nonblocking I/O once per server tick. Unloading cancels its task and closes
 all sockets.
 
+## Multiversion companion setup
+
+Use [Multiversion](https://market.pumpkinmc.org/plugin/s7e5Nz2f-multiversion) alongside
+EaglerXPumpkin for multi-version deployments. 1.17+ Eaglercraft support relies
+on this plugin for Minecraft protocol translation rather than adding a separate
+translator to EaglerXPumpkin. Install both WASM plugins in Pumpkin's
+`plugins/` directory and grant each plugin its requested permissions.
+
+Enable the client range in EaglerXPumpkin's `eagler.toml` by setting both
+bounds together:
+
+```toml
+min_minecraft_protocol = 755   # Minecraft 1.17
+max_minecraft_protocol = 777   # Minecraft 26.3
+```
+
+The gateway then accepts every client protocol in that inclusive range, selects
+the highest one the client offers, and tells rejected clients the accepted
+range. Omit both fields to accept only `minecraft_protocol`.
+
+The local test server uses this route:
+
+```text
+Eagler/Gaius WebSocket :8081 -> Multiversion 127.0.0.1:25565 -> Pumpkin 127.0.0.1:25566
+Java TCP clients           -> Multiversion :25565         -> Pumpkin 127.0.0.1:25566
+```
+
+Keep EaglerXPumpkin's `backend_address = "127.0.0.1"` and `backend_port = 25565`.
+In Multiversion's `plugins/data/multiversion/config.toml`, set
+`backend.address = "127.0.0.1:25566"` and `auth.online_mode = false` for the
+offline Eaglercraft test setup. In Pumpkin's `pumpkin.toml`:
+
+- Set `[networking.java]` to `address = "127.0.0.1:25566"`,
+  `online_mode = false` and `encryption = false`.
+- Enable `[networking.proxy]` and `[networking.proxy.velocity]`.
+- Match the Velocity `secret` to Multiversion's generated
+  `backend.forwarding_secret`; use the value generated for your installation.
+- Disable `[networking.java.compression]` when Multiversion's
+  `backend.pumpkin_compression = false`, as in the local setup.
+
+Follow Multiversion's generated `pumpkin-settings.txt` and startup diagnostics
+for its installed version. Restart Pumpkin after changing these settings and
+check that Multiversion accepts connections and its forwarding setup check
+passes. Connect Java/Gaius clients using port 25565; the WebSocket address
+remains `ws://127.0.0.1:8081/`.
+
+Local verification with Multiversion 0.6.1 completed a Minecraft 1.17
+(protocol 755) TCP login translated to 26.3, plus the existing 26.3 Eagler and
+Gaius probes through the proxy. This is not a full 1.17 graphical gameplay test.
+Gateway-side negotiation and per-version Login Start construction for 1.17+
+protocols are implemented and unit-tested, but no 1.17+ Eaglercraft client has
+been verified graphically yet; per-client matrix entries remain open.
+
 ## Server configuration and connecting
 
-In Pumpkin's `pumpkin.toml`, configure the Java listener for offline access:
+For a standalone same-version setup without Multiversion, configure the Java
+listener in Pumpkin's `pumpkin.toml` for offline access:
 
 ```toml
 [networking.java]
@@ -82,7 +157,9 @@ For the tested Gaius HTML, use an offline profile, then Multiplayer -> Direct
 Connect -> **127.0.0.1:25565**. Gaius automatically tries
 `ws://127.0.0.1:8081/tunnel`. Its `directPluginPort` URL option can select a
 custom gateway port. Enter the Minecraft backend port in Gaius, not port 8081.
-For Eaglercraft, use **ws://127.0.0.1:8081/** with a protocol 777 client.
+For Eaglercraft, use **ws://127.0.0.1:8081/** with a protocol 777 client, or
+with any client protocol inside the configured
+`min_minecraft_protocol`/`max_minecraft_protocol` range.
 
 ## Diagnostics
 
@@ -215,8 +292,11 @@ for public deployments.
 
 26.3 is the current target. Eaglercraft uses offline accounts, so the offline
 username login is the intended model and no password/registration flow is
-planned. Older Minecraft clients require a translation layer; Pumpkin's version
-enum alone does not provide that. The adaptive packet batcher's single-flush
+planned. The gateway negotiates 1.17+ client protocols when a protocol range is
+configured, but gameplay compatibility for those versions still depends on a
+translation layer (Multiversion) and per-client graphical verification;
+Pumpkin's version enum alone does not provide translation. Pre-1.17 clients
+remain deferred. The adaptive packet batcher's single-flush
 coalescing is inherent in the poll-driven send queue, and the wire format keeps
 one packet body per frame as in the reference. Dynamic backend-driven
 notifications, message channels, EaglerWeb, rewind and full Java feature parity

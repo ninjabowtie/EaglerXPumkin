@@ -6,7 +6,10 @@ use eaglerx_pumpkin::{config::Config, runtime::Runtime};
 use std::{
     io::{self, Read, Write},
     net::TcpStream,
-    sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -56,7 +59,9 @@ fn upgrade(port: u16) -> TcpStream {
     let head = String::from_utf8_lossy(&response);
     assert!(head.starts_with("HTTP/1.1 101"), "{head}");
     assert!(head.contains("s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), "{head}");
-    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
     stream
 }
 
@@ -183,7 +188,10 @@ fn malformed_sessions_are_rejected_without_harming_the_listener() {
             other => panic!("unexpected opcode {other}"),
         }
     }
-    assert!(saw_binary && saw_close, "expected disconnect packet and close");
+    assert!(
+        saw_binary && saw_close,
+        "expected disconnect packet and close"
+    );
 
     // An oversized frame length is dropped without a close frame.
     let mut stream = upgrade(port);
@@ -235,7 +243,9 @@ fn connection_rate_limit_closes_overflow_over_real_sockets() {
     thread::sleep(Duration::from_millis(100)); // let the runtime accept them
 
     let mut third = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    third.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    third
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
     let mut response = Vec::new();
     let _ = third.read_to_end(&mut response);
     assert!(

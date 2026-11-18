@@ -1,5 +1,8 @@
 # Pumpkin 26.3 gateway
 
+> [!WARNING]
+> This project adapts Minecraft networking for browser compatibility. It does not bypass Minecraft authentication or automatically change the server’s authentication settings. The current implementation requires a backend configured for offline mode.
+
 A runnable WASI Preview 2 plugin for stock Pumpkin, plus a native development
 CLI using the same networking state machine. Legacy Java reference code is
 available in Git history and in upstream EaglerXServer.

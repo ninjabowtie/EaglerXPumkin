@@ -61,9 +61,9 @@ Start Pumpkin and grant the plugin's requested permissions:
 The plugin creates `plugins/data/eaglerx-pumpkin/eagler.toml` on first load.
 A listener or config error fails the plugin load instead of pretending to run.
 
-Pumpkin's v0.1 plugin host uses WASI Preview 2. Do not change the build to
+Pumpkin's plugin host uses WASI Preview 2. Do not change the build to
 `wasm32-wasip3` or enable guest threads: that combination is incompatible with
-this pinned API. The runtime retains its listener and connections and polls
+the pinned `pumpkin-plugin-api` 0.2.1. The runtime retains its listener and
 nonblocking I/O once per server tick. Unloading cancels its task and closes
 all sockets.
 
@@ -141,8 +141,9 @@ account verification. The example binds the backend to loopback so browsers
 enter through the gateway. Use TLS termination for public HTTPS-hosted clients.
 
 The plugin defaults to `0.0.0.0:8081` -> `127.0.0.1:25565`.
-See [eagler.example.toml](eagler.example.toml) for all settings. Ports must differ; the backend must
-be a numeric loopback address. Restart/reload the plugin after changing config.
+See [eagler.example.toml](eagler.example.toml) for all settings. The listener and
+backend must not overlap on the same address/port; the backend must be a
+numeric loopback address. Restart/reload the plugin after changing config.
 `server_address` is the Minecraft handshake hostname injected for Eagler clients;
 Gaius sends its own Minecraft handshake unchanged.
 

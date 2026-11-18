@@ -100,7 +100,8 @@ remain deferred separately.
 
 ## Implemented architecture
 
-- Build `EaglerXPumpkin.wasm` for `wasm32-wasip2` with the pinned Pumpkin v0.1 API.
+- Build `EaglerXPumpkin.wasm` for `wasm32-wasip2` with the pinned
+  `pumpkin-plugin-api` 0.2.1.
 - Poll a nonblocking listener and connection state machines from Pumpkin's
   scheduler. No guest threads or socket cloning are required.
 - Listen on a separate WebSocket port (8081 by default) and connect only to the
@@ -116,11 +117,12 @@ remain deferred separately.
 - Limit new connections per source address (default 30 per rolling minute),
   refuse overflow and the global cap immediately, and report peer addresses on
   failures.
-- Log periodic diagnostics: active/playing counts, lifetime and interval peaks,
-  accepted/closed/refused/rate-limited totals and socket throughput per second.
+- Log periodic diagnostics: active/playing counts, lifetime peaks,
+  accepted/closed/refused/filtered/rate-limited totals and socket throughput
+  per second.
 - Cancel scheduled polling and close sockets on plugin unload.
 
-The v0.1 host requires WASI Preview 2. `network.loopback` restricts binds as well
+The plugin host requires WASI Preview 2. `network.loopback` restricts binds as well
 as connections, so the public listener does not request that permission.
 The plugin itself validates that backend destinations are loopback addresses.
 

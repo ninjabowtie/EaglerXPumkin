@@ -656,4 +656,61 @@ mod tests {
         assert_eq!(pl, payload);
         assert_eq!(consumed, buf.len());
     }
+
+    /// Micro-benchmark for the hand-rolled frame codec: throughput and
+    /// round-trip latency for representative Minecraft packet body sizes.
+    /// Throughput is reported for encode+decode round trips over the largest
+    /// payloads the gateway can forward (`MAX_MESSAGE_SIZE` bound).
+    #[test]
+    fn frame_codec_micro_benchmark() {
+        fn masked_frame(opcode: u8, fin: bool, payload: &[u8]) -> Vec<u8> {
+            let mask = [0x37, 0xFA, 0x21, 0x3D];
+            let mut frame = vec![opcode | if fin { 0x80 } else { 0 }, 0x80];
+            let len = payload.len();
+            if len < 126 {
+                frame[1] = 0x80 | len as u8;
+            } else if len <= u16::MAX as usize {
+                frame[1] = 0x80 | 126;
+                frame.extend_from_slice(&(len as u16).to_be_bytes());
+            } else {
+                frame[1] = 0x80 | 127;
+                frame.extend_from_slice(&(len as u64).to_be_bytes());
+            }
+            frame.extend_from_slice(&mask);
+            frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+            frame
+        }
+        for len in [64usize, 1024, 65_536, 262_144] {
+            let payload: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let frame = masked_frame(OP_BIN, true, &payload);
+            let rounds = 128usize;
+            let mut decoder = Decoder::default();
+            let start = std::time::Instant::now();
+            let mut decoded_bytes = 0usize;
+            for _ in 0..rounds {
+                decoder.push(&frame).unwrap();
+                match decoder.next_message().unwrap() {
+                    Some(message) => decoded_bytes += message.payload.len(),
+                    None => panic!("benchmark frame was not decoded"),
+                }
+            }
+            let elapsed = start.elapsed().as_secs_f64();
+            let bytes = len as f64 * rounds as f64;
+            let throughput_kibps = bytes / elapsed / 1024.0;
+            eprintln!(
+                "frame codec micro-benchmark: payload {len} bytes, {rounds} round trips in {elapsed:?} -> {throughput_kibps:.1} KiB/s"
+            );
+            assert_eq!(decoded_bytes, len * rounds);
+        }
+        let payload = vec![7u8; 262_144];
+        let frame = masked_frame(OP_BIN, true, &payload);
+        let mut decoder = Decoder::default();
+        let start = std::time::Instant::now();
+        decoder.push(&frame).unwrap();
+        assert!(decoder.next_message().unwrap().is_some());
+        eprintln!(
+            "frame codec micro-benchmark: largest payload round trip in {:?}",
+            start.elapsed()
+        );
+    }
 }

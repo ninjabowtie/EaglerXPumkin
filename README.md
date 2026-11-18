@@ -1,5 +1,8 @@
 # EaglerXPumpkin
 
+> [!WARNING]
+> This project adapts Minecraft networking for browser compatibility. It does not bypass Minecraft authentication or automatically change the server’s authentication settings. The current implementation requires a backend configured for offline mode.
+
 A Rust WebSocket gateway for **Pumpkin Minecraft 26.3**, distributed as a
 WASI Preview 2 plugin. Includes a native CLI for development.
 

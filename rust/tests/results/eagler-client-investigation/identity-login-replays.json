@@ -1,0 +1,114 @@
+[
+  {
+    "file": "1.20.6.html",
+    "protocol": 766,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe0",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "1.21.11 v1.html",
+    "protocol": 774,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe1",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "1.21.11 v2.html",
+    "protocol": 774,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe2",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "1.21.11 v3 wispcraft.html",
+    "protocol": 774,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe3",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "1.21.11 v3.html",
+    "protocol": 774,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe4",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "1.21.11 v4.html",
+    "protocol": 774,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe5",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "eaglercraft-26.2-fe8f1237.html",
+    "protocol": 776,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe6",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "file": "eaglercraft-26.3-fe8f1237.html",
+    "protocol": 777,
+    "kind": "synthetic replay; HTML client not executed",
+    "offered_eagler_versions": [
+      3,
+      4,
+      5
+    ],
+    "initial_identity": "ArtifactProbe7",
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "protocol": 766,
+    "synthetic": true,
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "protocol": 774,
+    "synthetic": true,
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  },
+  {
+    "protocol": 776,
+    "synthetic": true,
+    "negotiated": true,
+    "backend_login": true,
+    "finish_login": true
+  }
+]

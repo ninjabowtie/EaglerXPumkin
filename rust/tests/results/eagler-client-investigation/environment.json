@@ -1,0 +1,28 @@
+{
+  "recorded_utc": "2026-11-18T03:34:13.309573+00:00",
+  "pumpkin": "0.2.2+26.3-26.60",
+  "multiversion": "0.6.1 (startup log)",
+  "route": "WebSocket :8081 -> Multiversion :25565 -> Pumpkin :25566",
+  "gateway_range_before": [
+    777,
+    777
+  ],
+  "gateway_range_after": [
+    755,
+    777
+  ],
+  "files": {
+    "plugins/EaglerXPumpkin.wasm": {
+      "sha256": "af6ada43b3af3da97e52d127ef0ba55f080198443c3fa1a1c36e3ef3617f039e",
+      "bytes": 1498258
+    },
+    "plugins/Multiversion.wasm": {
+      "sha256": "2c50b56edf03bfb9429cd565b9196460ecb26b67f83bfa4df50891664cfedfd4",
+      "bytes": 3062198
+    },
+    "pumpkin-server": {
+      "sha256": "9882aa350ee8674d12870ee7c9fa6eed387101c32c34a5f3071a9040b1c29fd3",
+      "bytes": 124906104
+    }
+  }
+}

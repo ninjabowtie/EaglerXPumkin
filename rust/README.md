@@ -14,6 +14,8 @@ and handshake handling, not Minecraft protocol translation.
 Tested with **Pumpkin 0.2.2+26.3-26.60** (Minecraft protocol **777**) and
 **Gaius 26.3 portable v0.4.0-c263**. A human browser play test confirmed world
 loading, movement, chat, breaking and placing blocks.
+Gaius uses a separate tunnel transport; its graphical play test does not
+establish graphical Eaglercraft compatibility.
 
 Two transports share port 8081:
 
@@ -97,6 +99,17 @@ the highest one the client offers, and tells rejected clients the accepted
 range. Omit both fields to accept only `minecraft_protocol`.
 These bounds only control gateway negotiation; widening the range does not
 translate protocols or allow other versions to join without Multiversion.
+
+Installing Multiversion does not change an existing EaglerXPumpkin config.
+If older clients are rejected with "Use a Minecraft 26.3 Eaglercraft client
+(protocol 777)", check that both bounds above are set in the active
+`plugins/data/eaglerx-pumpkin/eagler.toml`, then restart/reload the gateway.
+Its startup log must report `MC protocols 755-777`, rather than `777-777`.
+Also verify that `backend_port` points to Multiversion's listener, not directly
+to Pumpkin. A successful version negotiation alone does not verify gameplay.
+See the [Eagler-only investigation](tests/results/eagler-client-investigation/README.md)
+for a reproduced exact-777 configuration failure and checks after enabling
+the range, including their real-client testing limits.
 
 The local test server uses this route:
 

@@ -1,0 +1,22 @@
+negotiated protocol 755 from offer [755]
+allow login: uuid a34566767e8a343f8d0eaa595e83f633 matches offline identity
+Eagler finish acknowledged
+play packet 0x10ee (19 bytes)
+play packet 0x26 (112103 bytes)
+play packet 0x66 (61050 bytes)
+play packet 0x18 (25 bytes)
+play packet 0x1b (6 bytes)
+packet counts: {0: 1, 2: 70, 4: 2, 6: 3, 10: 2, 12: 24, 14: 1, 15: 4, 18: 1, 20: 1, 22: 1, 24: 1, 27: 145, 32: 1, 33: 7, 34: 118, 35: 31, 37: 118, 38: 1, 41: 1776, 42: 2957, 43: 84, 50: 1, 54: 3, 56: 1, 57: 1, 58: 37, 62: 15170, 63: 5, 72: 1, 73: 1, 75: 2, 77: 128, 79: 712, 80: 1, 81: 3, 82: 1, 88: 121, 92: 28, 97: 290, 98: 2, 99: 1, 101: 1, 102: 1, 4334: 1}
+{
+  "protocol": 755,
+  "joined": true,
+  "positioned": true,
+  "keepalive": true,
+  "chat_echo": true,
+  "chunks": 118,
+  "total_packets": 21861,
+  "sustained": true,
+  "requested_seconds": 120,
+  "play_seconds": 120.0,
+  "keepalive_replies": 7
+}

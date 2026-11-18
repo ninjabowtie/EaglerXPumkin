@@ -1,0 +1,102 @@
+[
+  {
+    "file": "1.20.6.html",
+    "bytes": 55598521,
+    "sha256": "a8c33bc9cc5f7d51fd4031af6d2ffbc02c2ce4dccf39cf4f824514344722cf6d",
+    "html_title": "EaglercraftX 1.20.6 WASM-GC",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null,
+    "static_has_eagler_v5_request_login": true,
+    "static_version_strings": [
+      "1.20.6"
+    ]
+  },
+  {
+    "file": "1.21.11 v1.html",
+    "bytes": 48844680,
+    "sha256": "b020079e338b93420120d3659159d0c6a6dd0d1a563d49ff4f2b7cd04c7e96d3",
+    "html_title": "EaglercraftX 1.12 WASM-GC",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null,
+    "static_has_eagler_v5_request_login": false,
+    "static_version_strings": [
+      "1.21.11"
+    ]
+  },
+  {
+    "file": "1.21.11 v2.html",
+    "bytes": 48776200,
+    "sha256": "d5d250fbe2bcb1074d55daa605690a8347854e8682cbaa99d7483a843c0f5c72",
+    "html_title": "EaglercraftX 1.12 WASM-GC",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null,
+    "static_has_eagler_v5_request_login": false,
+    "static_version_strings": [
+      "1.21.11"
+    ]
+  },
+  {
+    "file": "1.21.11 v3 wispcraft.html",
+    "bytes": 50908931,
+    "sha256": "0c32392631270c9e8c1c700bc4c5c3e0f7af0419e9dbbe6c361a3bf2c8d0838e",
+    "html_title": "EaglercraftX 1.12 WASM-GC",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null,
+    "static_has_eagler_v5_request_login": false,
+    "static_version_strings": [
+      "1.21.11"
+    ]
+  },
+  {
+    "file": "1.21.11 v3.html",
+    "bytes": 49092152,
+    "sha256": "076680bc6de08215a65ddbaa4c41a2c8d1878f7abaa0708cc993d541a1fe257c",
+    "html_title": "EaglercraftX 1.12 WASM-GC",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null,
+    "static_has_eagler_v5_request_login": false,
+    "static_version_strings": [
+      "1.21.11"
+    ]
+  },
+  {
+    "file": "1.21.11 v4.html",
+    "bytes": 54305064,
+    "sha256": "31669539088930908c82f1d4ab5ce8c355eb1b48646316120ca7b360b7732848",
+    "html_title": "EaglercraftX 1.12 WASM-GC",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null,
+    "static_has_eagler_v5_request_login": false,
+    "static_version_strings": [
+      "1.21.11"
+    ],
+    "static_handshake_analysis": {
+      "method": "embedded EPW WASM decoded with LZMA; operators inspected using wasmparser 0.262.0",
+      "hello_function_index": 43005,
+      "protocol_getter_function_index": 10214,
+      "protocol_getter_constant": 774,
+      "offered_handshake_versions": [
+        3,
+        4,
+        5
+      ],
+      "note": "The mc47 incompatibility string is not evidence that the hello offers protocol 47."
+    }
+  },
+  {
+    "file": "eaglercraft-26.2-fe8f1237.html",
+    "bytes": 76841253,
+    "sha256": "6696df11def11874c5c1622fd0b34f71f0f150c7e097c82eb8b4df4d6f2b5b78",
+    "html_title": "Eaglercraft 26.2 (zeus/master)",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null
+  },
+  {
+    "file": "eaglercraft-26.3-fe8f1237.html",
+    "bytes": 78124802,
+    "sha256": "acc1496a73588730d94b7b27cf01fb317dc2ea7a124dff72f4ed6890ae51a8d3",
+    "html_title": "Eaglercraft 26.3 (zeus/master)",
+    "graphical_test": "blocked: browser access host unavailable",
+    "observed_protocol": null
+  }
+]

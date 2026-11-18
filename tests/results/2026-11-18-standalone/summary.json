@@ -1,0 +1,23 @@
+{
+  "started_utc": "2026-11-18T02:50:05.803524+00:00",
+  "finished_utc": "2026-11-18T02:50:21.562036+00:00",
+  "scope": "Standalone protocol 777; no Multiversion",
+  "cases": [
+    {
+      "transport": "eagler",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "transport": "gaius",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "transport": "vanilla",
+      "passed": true,
+      "exit_code": 0
+    }
+  ],
+  "unsupported_755_rejected": true
+}

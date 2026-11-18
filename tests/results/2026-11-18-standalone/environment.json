@@ -1,0 +1,12 @@
+{
+  "service": "pumpkinmc-standalone-test.service",
+  "route": "gateway :8081 -> Pumpkin 127.0.0.1:25565",
+  "minecraft_protocol": 777,
+  "multiversion_loaded": false,
+  "pumpkin_binary_sha256": "9882aa350ee8674d12870ee7c9fa6eed387101c32c34a5f3071a9040b1c29fd3",
+  "gateway_wasm_sha256": "af6ada43b3af3da97e52d127ef0ba55f080198443c3fa1a1c36e3ef3617f039e",
+  "java_address": "127.0.0.1:25565",
+  "online_mode": false,
+  "encryption": false,
+  "proxy_enabled": false
+}

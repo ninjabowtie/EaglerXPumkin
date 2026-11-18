@@ -4,6 +4,11 @@ A runnable WASI Preview 2 plugin for stock Pumpkin, plus a native development
 CLI using the same networking state machine. Legacy Java reference code is
 available in Git history and in upstream EaglerXServer.
 
+**Other client versions require [Multiversion](#multiversion-companion-setup).**
+EaglerXPumpkin alone does not let clients on versions other than the server's
+version join (26.3 for the tested server). It provides the gateway transport
+and handshake handling, not Minecraft protocol translation.
+
 ## Verified compatibility
 
 Tested with **Pumpkin 0.2.2+26.3-26.60** (Minecraft protocol **777**) and
@@ -36,7 +41,8 @@ rejects unsupported clients with a mismatch packet that names the accepted proto
 fields unset, only `minecraft_protocol` (default 777, Minecraft 26.3) is
 accepted, which keeps standalone installs on the verified setup.
 
-Accepting 1.17+ clients still requires a translation layer: the backend must
+Accepting 1.17+ clients on versions other than the server's still requires a
+translation layer: the backend must
 translate the client's protocol to Pumpkin's, which is the job of
 [Multiversion](#multiversion-companion-setup) in this setup. Each exact client
 build and protocol still needs verification with a real graphical client before
@@ -71,7 +77,9 @@ all sockets.
 ## Multiversion companion setup
 
 Use [Multiversion](https://market.pumpkinmc.org/plugin/s7e5Nz2f-multiversion) alongside
-EaglerXPumpkin for multi-version deployments. 1.17+ Eaglercraft support relies
+EaglerXPumpkin to let clients on versions other than the server's join.
+Without Multiversion, clients must match the server version (26.3 in the tested
+setup). 1.17+ Eaglercraft support across different server and client versions relies
 on this plugin for Minecraft protocol translation rather than adding a separate
 translator to EaglerXPumpkin. Install both WASM plugins in Pumpkin's
 `plugins/` directory and grant each plugin its requested permissions.
@@ -87,6 +95,8 @@ max_minecraft_protocol = 777   # Minecraft 26.3
 The gateway then accepts every client protocol in that inclusive range, selects
 the highest one the client offers, and tells rejected clients the accepted
 range. Omit both fields to accept only `minecraft_protocol`.
+These bounds only control gateway negotiation; widening the range does not
+translate protocols or allow other versions to join without Multiversion.
 
 The local test server uses this route:
 
@@ -186,7 +196,9 @@ Connect -> **127.0.0.1:25565**. Gaius automatically tries
 custom gateway port. Enter the Minecraft backend port in Gaius, not port 8081.
 For Eaglercraft, use **ws://127.0.0.1:8081/** with a protocol 777 client, or
 with any client protocol inside the configured
-`min_minecraft_protocol`/`max_minecraft_protocol` range.
+`min_minecraft_protocol`/`max_minecraft_protocol` range when Multiversion is
+installed and configured for protocol translation. Without Multiversion, use
+a client matching the server version (26.3 / protocol 777 in the tested setup).
 
 ## Diagnostics
 

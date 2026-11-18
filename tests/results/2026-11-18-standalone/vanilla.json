@@ -1,0 +1,15 @@
+{
+  "joined": true,
+  "position_acknowledged": true,
+  "chat_echo": true,
+  "keepalive_roundtrip": true,
+  "chunks": 118,
+  "registries": 32,
+  "minecraft_bytes": 7708961,
+  "transport": "vanilla",
+  "sustained": false,
+  "requested_seconds": 30,
+  "play_seconds": 15.15,
+  "keepalive_replies": 1,
+  "total_packets": 3832
+}

@@ -315,8 +315,9 @@ cargo test --workspace --target "$(rustc -vV | sed -n 's/^host: //p')"
 This also runs the real-socket integration tests in
 [crates/eaglerx-pumpkin/tests/gateway.rs](crates/eaglerx-pumpkin/tests/gateway.rs),
 which exercise the HTTP upgrade, animated MOTD frame cycling with the max-age
-close, malformed-session resilience and the connection rate limit through the
-runtime's poll loop with a background poller thread. No Pumpkin backend is
+close, the static MOTD query answer with the built-in server icon, malformed-
+session resilience and the connection rate limit through the runtime's poll
+loop with a background poller thread. No Pumpkin backend is
 required for those paths. Session tests cover every protocol 755–777 with
 compression disabled or enabled at thresholds 1 and 256, including login
 injection, Login Acknowledged, buffering and packet relay. The native suite

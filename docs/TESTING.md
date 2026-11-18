@@ -34,6 +34,12 @@ encode+decode throughput and round-trip latency for representative packet
 payloads (64 B through 256 KiB) as part of the native Rust suite. See the
 [Phase 0 roadmap](PUMPKIN_PORT_PLAN.md) for the recorded numbers.
 
+The real-socket integration suite also answers a static MOTD query over a live
+WebSocket and checks that the response carries the built-in EaglerXPumpkin
+server icon as a base64 data URI. See the
+[MOTD and animations](../rust/README.md#motd-and-animations) section for the
+icon behaviour and the `motd_icon` override.
+
 Python tests cover release-input handling, deadline behavior, and rejection
 checks that distinguish a peer close from a timeout. They need no running
 server. The manual release workflow currently runs `test_release.py` and the

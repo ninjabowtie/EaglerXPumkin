@@ -2,6 +2,8 @@
 
 Store reproducible test evidence and debugging information here. Executable
 Rust tests and live probe scripts remain in [`rust/tests`](../rust/tests).
+See the [testing guide](../docs/TESTING.md) for local checks and all live probe
+options, setup requirements and failure interpretation.
 
 ## Layout
 
@@ -39,6 +41,11 @@ See the [recorded sustained run](results/2026-11-18-mixed-sustained/README.md).
 Choose a new folder name for each run. The runner saves a summary and per-client
 JSON/log files. See the [recorded mixed-client run](results/2026-11-18-mixed-clients/summary.json)
 and [compatibility notes](compatibility/README.md) for the current evidence and limits.
+
+The recorded sustained run includes same-identity reconnects and a separate
+follow-up listener-health phase. Its `environment.json` records tested script
+hashes and unknown component versions. Keep measured results and setup limits
+together; do not infer graphical support from a passing synthetic probe.
 
 Commit useful, reviewed evidence. Remove credentials, forwarding secrets,
 private chat and personal addresses before committing logs or captures. Keep

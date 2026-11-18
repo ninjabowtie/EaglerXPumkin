@@ -14,7 +14,9 @@ The original Phase 0 spike and Phase 1 core gateway are complete for this
 target. Later phases are partially adopted; the checklist below records the
 original plan's remaining work.
 
-See [setup and verification](../rust/README.md) for commands and tested scope.
+See [setup and configuration](../rust/README.md), the
+[testing guide](TESTING.md) and [recorded evidence](../tests/README.md) for
+commands, results and tested scope.
 
 ## Planned Eaglercraft 1.17+ client support
 
@@ -206,7 +208,9 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   sprite sheets, weighted message pools, named message chains and the
   cache-control query subtypes of the EaglerMOTD addon are not ported. The
   graphical client verified so far (Gaius) uses `/tunnel` and does not
-  exercise the MOTD query path, so this is unit-test coverage only.
+  exercise the MOTD query path. Automated unit and real-socket integration
+  tests cover text cycling and max-age closure; graphical MOTD verification
+  remains pending.
 - [x] IPv4/IPv6 allow and block lists with CIDR prefixes, evaluated before the
   connection rate limiter.
 - [ ] Player whitelisting and UUID ban masks. Offline accounts make identity
@@ -225,7 +229,9 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 
 ### Testing strategy
 
-- [x] Live probes for both transports (Eagler v5 handshake and Gaius tunnel).
+- [x] Live simulated probes for Eagler v5, Gaius tunnel and raw vanilla TCP
+  through the gateway, including a translated 1.17 Eagler play stream and
+  same-identity reconnects. Recorded evidence lives in `tests/results/`.
 - [x] Unit coverage for framing, compression, login ordering, limits and rate
   limiting, plus real-socket integration tests that drive the runtime poll
   loop end to end: HTTP upgrade, animated MOTD cycling, malformed-session
@@ -233,6 +239,8 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - [ ] Golden protocol captures replayed from Java-plugin traffic.
 - [ ] Scripted browser end-to-end client.
 - [ ] Vanilla Java client regression while the Eagler listener is active.
+  Partial: simulated vanilla TCP 777 passed alongside Eagler/Gaius, sustained
+  sessions and reconnects; a graphical Java client has not been verified.
 - [ ] Sustained multi-client soak and fuzz run. The script
   rust/tests/soak_26_3.py is provided and was validated against the native
   gateway for its MOTD health-check and fuzz paths. A recorded 120-second
@@ -248,8 +256,10 @@ marked done only for the 26.3 gateway; annotations record scope changes.
 - Run sustained-load measurements with the periodic counters and tune
   `connections_per_minute`, `max_connections` and the diagnostics interval for
   public deployments.
-- Add automated coverage for the untested paths above: golden captures, a
-  scripted browser join, a vanilla-client regression and a multi-client soak.
+- Extend the recorded protocol smoke/sustained/reconnect checks with golden
+  captures, a scripted browser join, a graphical vanilla Java client, and a
+  longer mixed-client run with concurrent fuzzing. Keep exact component
+  versions and binary hashes with the evidence.
 - Port optional Eagler features as needed: notifications and pause menu
   extensions. Advertise capabilities only when their implementation is
   available.

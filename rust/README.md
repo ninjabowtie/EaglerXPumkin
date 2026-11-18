@@ -31,8 +31,8 @@ The gateway negotiates Minecraft versions with Eaglercraft clients: it selects
 the highest client-offered protocol inside the configured
 `min_minecraft_protocol`/`max_minecraft_protocol` range (see
 [eagler.example.toml](eagler.example.toml)), injects the version-correct Login
-Start packet for 1.17 through the newest release, and rejects unsupported
-clients with a mismatch packet that names the accepted protocols. With both
+Start packet for the tested protocol layouts from 1.17 through 26.3, and
+rejects unsupported clients with a mismatch packet that names the accepted protocols. With both
 fields unset, only `minecraft_protocol` (default 777, Minecraft 26.3) is
 accepted, which keeps standalone installs on the verified setup.
 
@@ -48,7 +48,8 @@ transport carries whatever Minecraft stream the client sends.
 
 ## Build and install
 
-Install stable Rust (tested with 1.100.0) and the WASI target:
+From the repository root, install stable Rust (tested with 1.100.0) and the
+WASI target:
 
 ```sh
 rustup target add wasm32-wasip2
@@ -140,7 +141,10 @@ With the documented Multiversion test route running, from `rust/`:
 python3 tests/probe_compatibility.py --output-dir /tmp/compatibility-new-run
 ```
 
-The runner saves JSON results and logs, and exits nonzero on a failed case.
+For sustained sessions and reconnects, add `--sustain --seconds 120 --reconnect`.
+The runner requires a new output directory, saves JSON results and logs, and
+exits nonzero on a failed case. See the [testing guide](../docs/TESTING.md) for
+all probe modes, recorded evidence and failure interpretation.
 
 ## Server configuration and connecting
 
@@ -266,7 +270,7 @@ For the native CLI, with Pumpkin already running and the WASM plugin disabled:
 It creates `rust/eagler.toml` on first run. You can supply a config path as the
 first argument. Do not run the plugin and native CLI on the same listen port.
 
-From `rust/`, run unit tests on the native host (override the default WASI target):
+From `rust/`, run the Rust suite on the native host (override the default WASI target):
 
 ```sh
 cargo test --workspace --target "$(rustc -vV | sed -n 's/^host: //p')"
@@ -277,17 +281,32 @@ This also runs the real-socket integration tests in
 which exercise the HTTP upgrade, animated MOTD frame cycling with the max-age
 close, malformed-session resilience and the connection rate limit through the
 runtime's poll loop with a background poller thread. No Pumpkin backend is
-required for those paths.
+required for those paths. Session tests cover every protocol 755–777 with
+compression disabled or enabled at thresholds 1 and 256, including login
+injection, Login Acknowledged, buffering and packet relay. The native suite
+last passed 50 tests.
+
+From the repository root, run the Python tests without a server:
+
+```sh
+python3 -m unittest discover -s rust/tests -p 'test_*.py'
+```
+
+The 13 tests cover release inputs, probe deadlines and peer-close assertions.
+See [testing and debugging](../docs/TESTING.md) for formatting/Clippy checks and
+the complete test-tool reference.
 
 With the real server and gateway running, from the repository root:
 
 ```sh
 python3 rust/tests/probe_26_3.py --transport eagler
 python3 rust/tests/probe_26_3.py --transport gaius
+python3 rust/tests/probe_26_3.py --transport vanilla
+python3 rust/tests/probe_1_17.py --seconds 30
 ```
 
-Both live probes completed configuration, teleport acknowledgement, chunk
-streaming, returned chat and a keepalive round trip through the WASM plugin.
+The original two 26.3 live probes completed configuration, teleport
+acknowledgement, chunk streaming, returned chat and a keepalive round trip through the WASM plugin.
 Each received 32 registries and 118 chunks (approximately 7.7 MB of Minecraft
 packet bodies). Unit coverage includes partial TCP reads/writes, incremental
 WebSocket fragmentation, 64 KiB+ frames, HTTP upgrades, compression transitions,
@@ -303,10 +322,13 @@ gateway running, from the repository root:
 python3 rust/tests/soak_26_3.py --clients 5 --fuzz-clients 2 --seconds 120
 ```
 
-The soak runs concurrent Eagler and Gaius players acting randomly, polls the
-MOTD query path as a periodic listener health check, and serves six malformed
-connection vectors that must each be closed by the gateway. It exits nonzero
-on any health-check failure, unexpected disconnect or unclosed fuzz
+The soak supports concurrent simulated 26.3 Eagler and Gaius players sending
+movement/chat, MOTD listener checks and six malformed-input vectors. The new
+recorded health/fuzz phase used `--clients 0` after the sustained mixed run;
+it did not validate simultaneous fuzzing and mixed-version gameplay. Timeouts
+no longer count as successful peer closes, and MOTD queries must receive a
+text frame. Use `--json-output PATH` to retain final counters and failures.
+It exits nonzero on any health-check failure, unexpected disconnect or unclosed fuzz
 connection, and prints periodic plus final counters. Use it together with the
 periodic `Eagler gateway:` diagnostics lines when tuning the connection limits
 for public deployments.

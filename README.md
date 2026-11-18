@@ -35,6 +35,19 @@ scope remains the 26.3 setup above. See the
 [1.17+ compatibility plan](docs/PUMPKIN_PORT_PLAN.md#planned-eaglercraft-117-client-support)
 for translation requirements, milestones and acceptance checks.
 
+## Testing and recorded results
+
+Automated session regressions cover protocols 755–777. Recorded live tests
+passed simultaneous simulated Eagler 1.17, Eagler 26.3, Gaius tunnel 26.3 and
+vanilla TCP sessions, followed by 120-second sessions and same-identity
+reconnects. A separate listener-health/malformed-input phase also passed.
+These results extend protocol coverage; graphical older-client support remains
+unverified. The exact translator binary/version was not re-established for
+the new runs.
+
+See the [testing guide](docs/TESTING.md) for commands and scope, and
+[`tests/`](tests/README.md) for results, client hashes and debugging notes.
+
 ## Build
 
 Install stable Rust and the WASI Preview 2 target, then run from the repository root:
@@ -79,7 +92,9 @@ enter a version, and choose **stable**, **beta**, or **alpha**.
 | `0.2.0` | beta | `v0.2.0-beta.1` |
 | `0.2.0-alpha.2` | alpha | `v0.2.0-alpha.2` |
 
-The workflow runs tests and builds the platform-independent WASM plugin.
+The workflow runs Rust checks and release-input tests, then builds the
+platform-independent WASM plugin. Live compatibility probes require the
+separate server setup in the [testing guide](docs/TESTING.md).
 Each release includes `EaglerXPumpkin.wasm`, a zip with setup instructions,
 license and example configuration, and `SHA256SUMS`. Beta and alpha releases
 are marked as prereleases; stable releases are marked as latest.

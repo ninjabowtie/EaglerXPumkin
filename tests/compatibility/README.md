@@ -80,6 +80,10 @@ It exits nonzero if any case fails or exceeds its deadline, and requires a new
 output directory to preserve earlier evidence. The 1.17 probe only implements
 protocol 755 play packets; other versions are permitted for negotiation checks.
 Use `probe_26_3.py --transport vanilla` for the raw TCP gateway regression.
+Add `--sustain --seconds 120 --reconnect` to the mixed runner to repeat the
+recorded sustained/reconnect checks. The [testing guide](../../docs/TESTING.md)
+explains deadlines, backend-port assumptions, result formats and the separate
+health/fuzz phase.
 
 ## Graphical acceptance checklist
 

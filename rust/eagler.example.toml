@@ -8,7 +8,9 @@ server_address = "localhost"
 minecraft_protocol = 777
 # Optional inclusive range of accepted client protocols. With Multiversion as
 # the translation proxy, this admits Eaglercraft clients for Minecraft 1.17+
-# (protocol 755) through the newest release. Both fields must be set together.
+# (protocol 755) through 26.3 (777) in this example. Set both fields together.
+# Protocol regression coverage does not establish graphical client support;
+# see docs/TESTING.md and tests/compatibility/README.md in the repository.
 # Leave both unset for the exact-protocol-only default above.
 # min_minecraft_protocol = 755
 # max_minecraft_protocol = 777

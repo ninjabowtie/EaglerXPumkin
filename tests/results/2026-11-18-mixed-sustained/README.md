@@ -44,3 +44,7 @@ benchmark or a long-duration production soak. The malformed-input check ran
 after the sustained sessions, not concurrently. The translator's exact running
 release/binary remains unknown. Keep graphical and exact-build support
 milestones open until those checks are recorded.
+
+For the full command reference, deadline semantics and current coverage, see
+[testing and debugging](../../../docs/TESTING.md). These historical result
+files retain their original timestamps, counters and source hashes.

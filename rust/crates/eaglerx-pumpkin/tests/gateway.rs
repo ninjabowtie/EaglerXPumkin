@@ -166,6 +166,36 @@ fn animated_motd_cycles_frames_over_real_sockets_until_max_age() {
     driver.join().unwrap();
 }
 
+/// The static MOTD answer served over a real WebSocket carries the built-in
+/// EaglerXPumpkin server icon as a base64 data URI and then closes the query.
+#[test]
+fn static_motd_query_over_real_sockets_returns_builtin_server_icon() {
+    let config = test_config();
+    config.validate().unwrap();
+    let (port, stop, driver) = start_runtime(config);
+    let mut stream = upgrade(port);
+
+    send_frame(&mut stream, 1, b"Accept: MOTD").unwrap();
+    let (opcode, data) = recv_frame(&mut stream)
+        .expect("static motd reply")
+        .expect("static motd answer then close");
+    assert_eq!(opcode, 1);
+    let text = String::from_utf8(data).unwrap();
+    assert!(text.contains("\"cache\":true"), "{text}");
+    assert!(text.contains("\"motd\""), "{text}");
+    assert!(
+        text.contains("\"icon\":\"data:image/png;base64,"),
+        "static answer must carry the built-in server icon: {text}"
+    );
+
+    let (opcode, _) = recv_frame(&mut stream).expect("read").expect("close");
+    assert_eq!(opcode, 8);
+
+    let _ = stream.shutdown(std::net::Shutdown::Both);
+    stop.store(true, Ordering::SeqCst);
+    driver.join().unwrap();
+}
+
 #[test]
 fn malformed_sessions_are_rejected_without_harming_the_listener() {
     let (port, stop, driver) = start_runtime(test_config());

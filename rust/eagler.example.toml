@@ -14,11 +14,18 @@ minecraft_protocol = 777
 # Leave both unset for the exact-protocol-only default above.
 # min_minecraft_protocol = 755
 # max_minecraft_protocol = 777
+# Absolute deadline for HTTP/Eagler login (1..3600 seconds).
+handshake_timeout_secs = 30
+# Inactivity limit for all connections (1..86400 seconds).
+idle_timeout_secs = 300
 max_connections = 64
 connections_per_minute = 30
 diagnostics_interval_secs = 60
 ip_allowlist = []
 ip_blocklist = []
+# Enable /eaglernotify <username|*> <JSON> (operator level 2 by default).
+# Only clients negotiating notification support receive dynamic alerts.
+dynamic_notifications = false
 # Optional V5 pause-menu link. Set both or leave both empty.
 pause_menu_button = ""
 pause_menu_url = ""

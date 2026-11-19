@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "artifact_sha256": "3643e00172f433dd64c3ddf93919632cd5420b1a98ae62bad45432f92a73bda7",
+  "gateway_port": 52059,
+  "scope": "isolated WASI host, console commands and simulated notification-capable Eagler client",
+  "checks": [
+    "command registration",
+    "capability negotiation",
+    "targeted highest/silent alert",
+    "dismissal by ID",
+    "broadcast update preserves badge UUID"
+  ],
+  "non_operator_permissions_checked": true
+}

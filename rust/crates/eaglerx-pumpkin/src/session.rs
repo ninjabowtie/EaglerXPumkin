@@ -116,7 +116,7 @@ fn optional_capabilities(cfg: &Config) -> u32 {
     if cfg.pause_menu().is_some() {
         caps |= ui::CAP_PAUSE_MENU;
     }
-    if cfg.notification().is_some() {
+    if cfg.dynamic_notifications || cfg.notification().is_some() {
         caps |= ui::CAP_NOTIFICATION;
     }
     caps
@@ -221,6 +221,13 @@ impl Session {
             opcode: OP_BIN,
             payload,
         });
+    }
+    pub fn notification_target(&self, target: &str) -> bool {
+        !self.closing
+            && self.is_playing()
+            && self.version >= 5
+            && self.capabilities & ui::CAP_NOTIFICATION != 0
+            && (target == "*" || target == self.username)
     }
     pub fn is_playing(&self) -> bool {
         self.stage == Stage::Play
@@ -723,6 +730,33 @@ mod tests {
         );
         (session, cfg, store)
     }
+    #[test]
+    fn dynamic_notification_capabilities_and_recipient_gates() {
+        let mut cfg = Config::default();
+        assert_eq!(optional_capabilities(&cfg) & ui::CAP_NOTIFICATION, 0);
+        cfg.dynamic_notifications = true;
+        assert_ne!(optional_capabilities(&cfg) & ui::CAP_NOTIFICATION, 0);
+        let mut session = Session {
+            username: "Player".into(),
+            version: 5,
+            capabilities: ui::CAP_NOTIFICATION,
+            ..Session::default()
+        };
+        assert!(!session.notification_target("*"));
+        session.stage = Stage::Play;
+        assert!(session.notification_target("*"));
+        assert!(session.notification_target("Player"));
+        assert!(!session.notification_target("player"));
+        session.version = 4;
+        assert!(!session.notification_target("*"));
+        session.version = 5;
+        session.capabilities = 0;
+        assert!(!session.notification_target("*"));
+        session.capabilities = ui::CAP_NOTIFICATION;
+        session.closing = true;
+        assert!(!session.notification_target("*"));
+    }
+
     #[test]
     fn initial_identity_is_used_when_nickname_selection_is_disabled() {
         for requested in ["", "OtherName"] {

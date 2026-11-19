@@ -12,7 +12,6 @@ pub const CAP_PAUSE_MENU: u32 = 1 << 4;
 const PACKET_PAUSE_MENU: u8 = 0x18;
 const PACKET_NOTIFICATION: u8 = 0x1F;
 const SERVER_INFO_MODE_EXTERNAL_URL: u8 = 1;
-const BADGE_PRIORITY_NORMAL: u8 = 1;
 const WHITE: [u8; 3] = [0xFF, 0xFF, 0xFF];
 
 /// Stable ID so reconnects replace the same notification instead of stacking.
@@ -56,16 +55,37 @@ pub fn notification(
     expire_after_secs: u16,
     timestamp_secs: u64,
 ) -> Vec<u8> {
+    notification_with_options(
+        &JOIN_BADGE,
+        &crate::notifications::Notification {
+            title: title.into(),
+            body: body.into(),
+            source: source.into(),
+            hide_after_secs,
+            expire_after_secs,
+            ..Default::default()
+        },
+        timestamp_secs,
+    )
+}
+
+/// Shared encoder for static welcome messages and dynamic badges. The caller
+/// supplies the badge UUID; priorities and silent delivery follow Eagler V5.
+pub fn notification_with_options(
+    id: &[u8; 16],
+    request: &crate::notifications::Notification,
+    timestamp_secs: u64,
+) -> Vec<u8> {
     let mut out = vec![PACKET_NOTIFICATION];
-    out.extend_from_slice(&JOIN_BADGE);
-    mc_string(&mut out, &component(body));
-    mc_string(&mut out, &component(title));
-    mc_string(&mut out, &component(source));
+    out.extend_from_slice(id);
+    mc_string(&mut out, &component(&request.body));
+    mc_string(&mut out, &component(&request.title));
+    mc_string(&mut out, &component(&request.source));
     out.extend_from_slice(&((timestamp_secs >> 32) as u16).to_be_bytes());
     out.extend_from_slice(&(timestamp_secs as u32).to_be_bytes());
-    out.push(BADGE_PRIORITY_NORMAL << 1);
-    out.push(hide_after_secs);
-    out.extend_from_slice(&expire_after_secs.to_be_bytes());
+    out.push((request.priority as u8) << 1 | u8::from(request.silent));
+    out.push(request.hide_after_secs);
+    out.extend_from_slice(&request.expire_after_secs.to_be_bytes());
     for _ in 0..4 {
         out.extend_from_slice(&WHITE);
     }

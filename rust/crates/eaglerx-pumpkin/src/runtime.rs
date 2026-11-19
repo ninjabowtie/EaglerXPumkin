@@ -13,6 +13,14 @@ const IO_BUDGET: usize = 256 * 1024;
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 const MAX_TRACKED_ADDRESSES: usize = 4096;
 
+/// Traffic resets only the inactivity timer; a partial handshake cannot extend
+/// its absolute deadline by dripping bytes. Raw relays and animated queries
+/// are exempt from the handshake deadline, but still have an inactivity limit.
+fn connection_timed_out(cfg: &Config, age: Duration, idle: Duration, handshaking: bool) -> bool {
+    idle >= Duration::from_secs(cfg.idle_timeout_secs)
+        || handshaking && age >= Duration::from_secs(cfg.handshake_timeout_secs)
+}
+
 #[derive(Default)]
 struct Queue {
     bytes: Vec<u8>,
@@ -526,14 +534,19 @@ impl Connection {
         if let Some(backend) = &mut self.backend {
             self.backend_out.flush(backend)?;
         }
-        if self.active.elapsed() > Duration::from_secs(300) {
-            return Ok(false);
-        }
-        if self.mode != Mode::Raw
+        let handshaking = self.mode != Mode::Raw
             && !(self.session.is_playing() || self.tunnel && self.backend.is_some())
-            && !self.session.is_animating_motd()
-            && self.started.elapsed() > Duration::from_secs(30)
-        {
+            && !self.session.is_animating_motd();
+        if connection_timed_out(
+            cfg,
+            self.started.elapsed(),
+            self.active.elapsed(),
+            handshaking,
+        ) {
+            debug!(
+                "connection deadline exceeded for {} (handshaking: {handshaking})",
+                self.peer
+            );
             return Ok(false);
         }
         Ok(true)
@@ -593,6 +606,58 @@ impl Runtime {
             connections: Vec::new(),
             skins: SkinStore::default(),
         })
+    }
+    /// Queue a dynamic alert for connected Eagler clients that negotiated it.
+    /// Returns recipients queued, not acknowledgements. Slow peers with full
+    /// send queues are skipped; alerts are not stored for offline players.
+    pub fn notify(
+        &mut self,
+        target: &str,
+        notification: &crate::notifications::Notification,
+    ) -> Result<usize, String> {
+        notification.validate()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        self.queue_notification(target, &notification.packet(now))
+    }
+
+    /// Dismiss a dynamic badge for eligible connected recipients. Queued counts
+    /// do not imply the client had that badge or acknowledged its removal.
+    pub fn dismiss_notification(
+        &mut self,
+        target: &str,
+        request: &crate::notifications::DismissNotification,
+    ) -> Result<usize, String> {
+        self.queue_notification(target, &request.packet()?)
+    }
+
+    fn queue_notification(&mut self, target: &str, packet: &[u8]) -> Result<usize, String> {
+        if !self.config.dynamic_notifications {
+            return Err(
+                "dynamic_notifications is disabled; enable it and reload the gateway".into(),
+            );
+        }
+        crate::notifications::validate_target(target)?;
+        let frame = ws::encode_message(OP_BIN, packet);
+        let mut queued = 0;
+        for connection in &mut self.connections {
+            if connection.closing.is_none()
+                && connection.mode == Mode::WebSocket
+                && !connection.tunnel
+                && connection.session.notification_target(target)
+            {
+                match connection.client_out.push(&frame) {
+                    Ok(()) => queued += 1,
+                    Err(_) => warn!(
+                        "notification skipped for {}: send queue full",
+                        connection.peer
+                    ),
+                }
+            }
+        }
+        Ok(queued)
     }
     pub fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
         self.listener.local_addr()
@@ -680,6 +745,126 @@ impl Runtime {
 mod tests {
     use super::*;
     use std::net::Ipv4Addr;
+    /// Negotiate a real Eagler session with synthetic backend Login Success;
+    /// keep a connected TCP peer so delivery exercises the actual send queue.
+    fn notification_connection(cfg: &Config, name: &str, offered: bool) -> (Connection, TcpStream) {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let peer = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let (socket, addr) = listener.accept().unwrap();
+        let mut connection = Connection::new(socket, addr).unwrap();
+        connection.mode = Mode::WebSocket;
+        let mut store = SkinStore::default();
+        let mut send = |session: &mut Session, payload: Vec<u8>| {
+            session
+                .client_message(
+                    ws::Message {
+                        opcode: OP_BIN,
+                        payload,
+                    },
+                    cfg,
+                    0,
+                    &mut store,
+                )
+                .unwrap();
+        };
+        send(
+            &mut connection.session,
+            b"\x01\x02\x00\x01\x00\x05\x00\x01\x03\x09\x04Test\x01x\x00\x00".to_vec(),
+        );
+        let mut request = vec![4, name.len() as u8];
+        request.extend_from_slice(name.as_bytes());
+        request.extend_from_slice(b"\x07default\x00\x00\x00");
+        request.push(if offered { 8 } else { 0 });
+        if offered {
+            request.push(1);
+        }
+        request.push(0);
+        send(&mut connection.session, request);
+        let mut success = vec![2];
+        success.extend_from_slice(&[7; 16]);
+        crate::minecraft::string(&mut success, name);
+        success.push(0);
+        let codec = crate::minecraft::Codec::default();
+        connection
+            .session
+            .backend_bytes(&codec.encode(&success).unwrap())
+            .unwrap();
+        send(&mut connection.session, vec![8]);
+        connection.session.client_output.clear();
+        connection.session.backend_output.clear();
+        connection.session.connect_requested = false;
+        (connection, peer)
+    }
+
+    #[test]
+    fn dynamic_notifications_target_negotiated_clients_and_respect_queue_bounds() {
+        use std::io::Read;
+        let cfg = Config {
+            listen_port: 0,
+            dynamic_notifications: true,
+            ..Config::default()
+        };
+        let mut runtime = Runtime::bind(cfg.clone()).unwrap();
+        let (alice, mut alice_peer) = notification_connection(&cfg, "Alice", true);
+        let (bob, _bob_peer) = notification_connection(&cfg, "Bob", true);
+        let (unsupported, _unsupported_peer) = notification_connection(&cfg, "Other", false);
+        runtime.connections.extend([alice, bob, unsupported]);
+        let request = crate::notifications::Notification {
+            title: "Alert".into(),
+            ..Default::default()
+        };
+        assert_eq!(runtime.notify("Alice", &request).unwrap(), 1);
+        assert_eq!(runtime.connections[1].client_out.len(), 0);
+        assert_eq!(runtime.connections[2].client_out.len(), 0);
+        let expected = runtime.connections[0].client_out.bytes.clone();
+        runtime.poll();
+        let mut received = vec![0; expected.len()];
+        alice_peer.read_exact(&mut received).unwrap();
+        assert_eq!(received, expected);
+        let dismiss = crate::notifications::DismissNotification {
+            id: request.id.clone(),
+        };
+        assert_eq!(runtime.dismiss_notification("Alice", &dismiss).unwrap(), 1);
+        runtime.poll();
+        let mut hidden = [0; 20];
+        alice_peer.read_exact(&mut hidden).unwrap();
+        assert_eq!(&hidden[..4], &[0x82, 18, 0xee, 0x20]);
+        assert_eq!(&hidden[4..], &request.badge_id());
+        assert_eq!(runtime.dismiss_notification("Other", &dismiss).unwrap(), 0);
+        assert_eq!(runtime.notify("Nobody", &request).unwrap(), 0);
+        assert!(runtime.notify("@a", &request).is_err());
+        assert_eq!(runtime.notify("*", &request).unwrap(), 2);
+        runtime.connections[0].client_out.bytes = vec![0; MAX_QUEUE];
+        runtime.connections[0].client_out.offset = 0;
+        assert_eq!(runtime.notify("*", &request).unwrap(), 1);
+        runtime.connections[1].closing = Some(Instant::now());
+        assert_eq!(runtime.notify("*", &request).unwrap(), 0);
+        runtime.config.dynamic_notifications = false;
+        assert!(runtime.notify("*", &request).is_err());
+        assert!(runtime.dismiss_notification("*", &dismiss).is_err());
+    }
+
+    #[test]
+    fn connection_deadlines_distinguish_handshake_age_and_inactivity() {
+        let cfg = Config {
+            handshake_timeout_secs: 10,
+            idle_timeout_secs: 60,
+            ..Config::default()
+        };
+        let seconds = Duration::from_secs;
+        assert!(!connection_timed_out(&cfg, seconds(9), seconds(9), true));
+        assert!(connection_timed_out(&cfg, seconds(10), seconds(0), true));
+        assert!(!connection_timed_out(
+            &cfg,
+            seconds(100),
+            seconds(59),
+            false
+        ));
+        assert!(connection_timed_out(&cfg, seconds(100), seconds(60), false));
+        assert!(connection_timed_out(&cfg, seconds(100), seconds(61), true));
+    }
+
     #[test]
     fn send_queue_preserves_partial_writes_and_appended_bytes() {
         struct ShortWriter {

@@ -338,3 +338,27 @@ fn listener_binds_ephemeral_port() {
     taken.listen_port = addr.port();
     assert!(Runtime::bind(taken).is_err());
 }
+
+#[test]
+fn stalled_handshakes_are_closed_and_listener_recovers() {
+    let (port, stop, driver) = start_runtime(Config {
+        handshake_timeout_secs: 1,
+        idle_timeout_secs: 60,
+        ..test_config()
+    });
+    // Both a silent TCP connection and an upgraded socket awaiting Eagler
+    // login must expire without needing another client packet.
+    let mut silent = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    silent
+        .set_read_timeout(Some(Duration::from_secs(4)))
+        .unwrap();
+    let mut upgraded = upgrade(port);
+    let mut byte = [0];
+    assert_eq!(silent.read(&mut byte).unwrap(), 0);
+    assert!(recv_frame(&mut upgraded).unwrap().is_none());
+    let mut healthy = upgrade(port);
+    send_frame(&mut healthy, 1, b"Accept: MOTD").unwrap();
+    assert_eq!(recv_frame(&mut healthy).unwrap().unwrap().0, 1);
+    stop.store(true, Ordering::SeqCst);
+    driver.join().unwrap();
+}

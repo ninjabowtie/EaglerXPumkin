@@ -2,12 +2,15 @@
 pub mod config;
 pub mod ip_filter;
 pub mod minecraft;
+pub mod notifications;
 pub mod runtime;
 mod session;
 mod skins;
 mod ui;
 
 mod motd_icon;
+#[cfg(target_os = "wasi")]
+mod notification_command;
 
 /// The repository logo resized to 64x64 for Eagler server-list queries.
 pub const EAGLER_ICON: &[u8] = include_bytes!("../assets/motd-icon.png");
@@ -68,9 +71,13 @@ mod plugin {
             }
             let path = PathBuf::from(context.get_data_folder()).join("eagler.toml");
             let config = Config::load(&path)?;
+            let dynamic_notifications = config.dynamic_notifications;
             let runtime = Arc::new(Mutex::new(Some(
                 Runtime::bind(config).map_err(|e| format!("listener failed: {e}"))?,
             )));
+            if dynamic_notifications {
+                crate::notification_command::register(&context, Arc::clone(&runtime))?;
+            }
             let task_runtime = Arc::clone(&runtime);
             let task = context.schedule_repeating_task(1, 1, move |_server| {
                 if let Ok(mut runtime) = task_runtime.lock()

@@ -25,12 +25,15 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_minecraft_protocol: Option<u16>,
     pub max_connections: usize,
+    pub handshake_timeout_secs: u64,
+    pub idle_timeout_secs: u64,
     pub connections_per_minute: u32,
     pub diagnostics_interval_secs: u64,
     pub ip_allowlist: Vec<String>,
     pub ip_blocklist: Vec<String>,
     pub pause_menu_button: String,
     pub pause_menu_url: String,
+    pub dynamic_notifications: bool,
     pub notification_title: String,
     pub notification_body: String,
     pub notification_source: String,
@@ -57,12 +60,15 @@ impl Default for Config {
             min_minecraft_protocol: None,
             max_minecraft_protocol: None,
             max_connections: 64,
+            handshake_timeout_secs: 30,
+            idle_timeout_secs: 300,
             connections_per_minute: 30,
             diagnostics_interval_secs: 60,
             ip_allowlist: Vec::new(),
             ip_blocklist: Vec::new(),
             pause_menu_button: String::new(),
             pause_menu_url: String::new(),
+            dynamic_notifications: false,
             notification_title: String::new(),
             notification_body: String::new(),
             notification_source: String::new(),
@@ -102,6 +108,15 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        for (name, value, max) in [
+            ("handshake_timeout_secs", self.handshake_timeout_secs, 3600),
+            ("idle_timeout_secs", self.idle_timeout_secs, 86400),
+        ] {
+            if value == 0 || value > max {
+                return Err(format!("{name} must be between 1 and {max}"));
+            }
+        }
+
         if !self.backend_address.is_loopback() {
             return Err("backend_address must be a loopback IP address".into());
         }
@@ -268,6 +283,28 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_timeout_config_defaults_and_bounds() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.handshake_timeout_secs, 30);
+        assert_eq!(cfg.idle_timeout_secs, 300);
+        for (handshake, idle, valid) in [
+            (1, 1, true),
+            (3600, 86400, true),
+            (0, 300, false),
+            (30, 0, false),
+            (3601, 300, false),
+            (30, 86401, false),
+        ] {
+            let cfg = Config {
+                handshake_timeout_secs: handshake,
+                idle_timeout_secs: idle,
+                ..Config::default()
+            };
+            assert_eq!(cfg.validate().is_ok(), valid);
+        }
+    }
 
     #[test]
     fn partial_config_keeps_new_defaults() {

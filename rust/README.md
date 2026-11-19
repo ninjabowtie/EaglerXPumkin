@@ -197,6 +197,13 @@ source address over a rolling minute. `max_connections` remains the global cap;
 connections above either limit are accepted and closed immediately. Tune both
 for public deployments and load tests.
 
+`handshake_timeout_secs` (default `30`, range `1..3600`) sets the absolute
+HTTP/Eagler login deadline; partial traffic does not extend it. Established
+Gaius tunnels, raw TCP relays and MOTD animations are exempt from this deadline.
+`idle_timeout_secs` (default `300`, range `1..86400`) closes any connection with
+no traffic for that duration. Both settings must be positive; existing configs
+retain the defaults. Restart/reload after changing them.
+
 `ip_allowlist` and `ip_blocklist` accept exact addresses or CIDR ranges (IPv4 or
 IPv6). When the allowlist is non-empty, only matching addresses may connect; the
 blocklist always takes precedence. Rules are checked before the rate limiter, so
@@ -295,10 +302,76 @@ world; the badge reuses a stable UUID so a reconnect replaces the previous
 message instead of stacking it. Notifications require at least one of the three
 text fields.
 
-Both features are advertised during the V5 capability exchange only when they
-are configured and the client supports them, so clients without V5 support are
-unaffected. Only static content is implemented; per-event notifications and
-message channels driven by the backend remain future work.
+Both features are advertised during V5 capability exchange only when configured
+and supported by the client. Static welcome messages still work independently
+of dynamic notifications.
+
+### Dynamic notification commands
+
+Set `dynamic_notifications = true` in `eagler.toml`, reload/restart the plugin,
+and reconnect existing clients so they negotiate notification support. The
+plugin registers these Pumpkin commands only when enabled:
+
+```text
+eaglernotify <exact_username|*> <notification JSON>
+eaglernotifyhide <exact_username|*> {"id":"badge ID"}
+```
+
+From the server console (use `/` before the command in game):
+
+```text
+eaglernotify * {"id":"maintenance","title":"Server maintenance","body":"Restart in five minutes","source":"Admin","hide_after_secs":15,"expire_after_secs":300}
+eaglernotify PlayerName {"id":"reward","title":"Quest complete!","body":"Your reward is ready."}
+eaglernotify * {"id":"maintenance","title":"Maintenance postponed","body":"Keep playing!","priority":"higher","silent":true}
+eaglernotifyhide * {"id":"maintenance"}
+```
+
+The permission node is `eaglerx-pumpkin:command.notify`, granted by default to
+operators at level 2 or above. Console, command blocks and other server plugins
+can invoke the command through Pumpkin's normal command dispatcher, subject to
+its permission checks. This provides server-driven alerts without exposing a
+new network listener or reading commands from clients.
+
+Show JSON accepts `id`, `title`, `body`, `source`, `priority`, `silent`,
+`hide_after_secs` and `expire_after_secs`; unknown fields are rejected.
+Priority is `low`, `normal` (default), `higher` or `highest`. `silent` defaults
+to false. These use the original Eagler protocol flags.
+Dismiss JSON requires only `id` (same 1–64 byte ID used to show the badge),
+rejects unknown fields, and is limited to 1024 bytes. It removes that badge from
+the selected clients; dismissing an absent ID is harmless. It cannot dismiss
+the separate static welcome badge. Defaults are ID `server`,
+source `EaglerXPumpkin`, hide after 10 seconds and expire after 3600 seconds.
+A title or body is required. Text is literal; JSON text components are not
+interpreted. Reusing an ID replaces that badge for each recipient; different
+IDs coexist. IDs are 1–64 UTF-8 bytes. Serialized text components must fit
+255 bytes for title/source and 32767 bytes for body. The command JSON is capped
+at 65536 bytes. Hide time must be positive and cannot exceed expiration.
+
+Recipients are connected Eagler V5 sessions that negotiated notifications.
+`*` broadcasts; usernames are exact and case-sensitive. Gaius tunnels, raw Java
+connections, unsupported clients and closing connections are skipped. Full send
+queues are skipped and logged. Feedback reports **queued connections**, not
+client acknowledgements. Offline alerts are not retained or replayed on login.
+
+Native embedders can call `Runtime::notify(target, &Notification)` using the
+same validated request type in `eaglerx_pumpkin::notifications`. The native CLI
+does not register Pumpkin commands. Native callers can also use
+`Runtime::dismiss_notification(target, &DismissNotification)`. Custom badge
+icons and arbitrary client/backend message channels remain future work.
+
+For an isolated live WASI host test, from `rust/`:
+
+```sh
+python3 tests/probe_notifications.py --pumpkin-binary /path/to/pumpkin-server --output-dir /tmp/NEW-badge-test
+```
+
+This starts a separate Pumpkin world/backend and gateway on loopback ports,
+checks console show/dismiss/broadcast commands with a simulated capable client,
+checks non-operator rejection, and shuts the child server down. It needs a new
+output directory and saves a console log plus `result.json`. It does not modify
+the installed server. Optional `--backend-port` uses an existing offline 777
+backend and skips the isolated-backend permission check. Graphical rendering
+still requires a real Eagler client.
 
 ## Development and verification
 

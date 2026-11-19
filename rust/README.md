@@ -229,16 +229,21 @@ The `motd` string answers Eagler server-list queries with up to two lines and
 is sent once per query with `"cache": true`, after which the query connection
 closes.
 
-The answer also carries a server icon. By default it is the built-in EaglerXPumpkin
-icon: the repository's `EaglerXPumpkin.png` embedded as a base64 data URI, so
-browser (EaglerCraft) clients see the EaglerXPumpkin server icon instead of the
-backend's default. Answers are produced only by the Eagler gateway listener, so
-the default applies only to EaglerCraft/Eagler connections arriving through the
-gateway.
+The answer also carries a server icon. By default it is the repository's
+`EaglerXPumpkin.png`, resized to 64×64 and embedded in the gateway. The JSON
+announces `"icon": true`, followed by a separate binary WebSocket frame of
+16384 RGBA bytes, as required by Eagler. Static `MOTD.noicon` queries omit the
+binary frame and announce `"icon": false`.
 
-Set `motd_icon` to override the default with an image URL or data URI for
-deployments that host their own icon; leave it unset for the built-in icon. The
-value must be a non-empty ASCII image URL or data URI of at most 2097152 bytes.
+Set `motd_icon` to a base64 PNG data URI (`data:image/png;base64,...`) to
+override the default. The PNG must be non-animated and exactly 64×64; the URI
+must be at most 2097152 bytes. Invalid images and image URLs fail config
+validation at startup. The gateway does not fetch remote images. Download
+and resize an image before encoding it. Leave the field unset for the built-in
+icon. Animated MOTD frames currently advertise no icon.
+
+To regenerate the embedded icon after changing the project logo, run
+`python3 scripts/prepare_motd_icon.py` from `rust/` (requires Pillow).
 
 Set `motd_frames` to animate it instead. Each entry is one full frame in the
 same `line1\nline2` format (up to 32 frames, 2048 bytes each). The query
@@ -315,13 +320,13 @@ cargo test --workspace --target "$(rustc -vV | sed -n 's/^host: //p')"
 This also runs the real-socket integration tests in
 [crates/eaglerx-pumpkin/tests/gateway.rs](crates/eaglerx-pumpkin/tests/gateway.rs),
 which exercise the HTTP upgrade, animated MOTD frame cycling with the max-age
-close, the static MOTD query answer with the built-in server icon, malformed-
+close, static MOTD JSON/binary icon ordering, custom icons and no-icon queries, malformed-
 session resilience and the connection rate limit through the runtime's poll
 loop with a background poller thread. No Pumpkin backend is
 required for those paths. Session tests cover every protocol 755–777 with
 compression disabled or enabled at thresholds 1 and 256, including login
 injection, Login Acknowledged, buffering and packet relay. The native suite
-last passed 50 tests.
+is covered by the validation results in [the dev review](tests/results/dev-review/README.md).
 
 From the repository root, run the Python tests without a server:
 
@@ -350,9 +355,11 @@ WebSocket fragmentation, 64 KiB+ frames, HTTP upgrades, compression transitions,
 malformed lengths, Eagler login ordering, skin profile parsing and injected
 skin responses, per-address rate limiting, and animated MOTD frame cycling
 with the max-age close. The `eagler-ws` frame codec micro-benchmark
-(`frame_codec_micro_benchmark`) records encode+decode throughput and round-trip
-latency for representative packet payloads (64 B through 256 KiB). This is not a
-throughput benchmark.
+(`frame_codec_micro_benchmark`) measures masked-client decoding and server-reply
+encoding per iteration for representative payloads (64 B through 256 KiB).
+It reports payload throughput and mean codec time per iteration, excluding
+sockets and backend work. Earlier recorded numbers timed decoding only and
+should not be treated as encode/decode round-trip measurements.
 
 For a sustained multi-client soak with fuzzing, with the real server and
 gateway running, from the repository root:

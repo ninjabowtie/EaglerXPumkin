@@ -167,7 +167,7 @@ fn animated_motd_cycles_frames_over_real_sockets_until_max_age() {
 }
 
 /// The static MOTD answer served over a real WebSocket carries the built-in
-/// EaglerXPumpkin server icon as a base64 data URI and then closes the query.
+/// EaglerXPumpkin server icon as a separate RGBA frame and then closes the query.
 #[test]
 fn static_motd_query_over_real_sockets_returns_builtin_server_icon() {
     let config = test_config();
@@ -183,15 +183,56 @@ fn static_motd_query_over_real_sockets_returns_builtin_server_icon() {
     let text = String::from_utf8(data).unwrap();
     assert!(text.contains("\"cache\":true"), "{text}");
     assert!(text.contains("\"motd\""), "{text}");
-    assert!(
-        text.contains("\"icon\":\"data:image/png;base64,"),
-        "static answer must carry the built-in server icon: {text}"
-    );
+    let response: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(response["data"]["icon"], true);
+    assert!(!text.contains("data:image"));
+    let (opcode, pixels) = recv_frame(&mut stream).unwrap().expect("icon frame");
+    assert_eq!(opcode, 2);
+    assert_eq!(pixels, eaglerx_pumpkin::builtin_motd_icon());
+    assert!(text.len() < 4096, "MOTD JSON must not embed the PNG");
 
     let (opcode, _) = recv_frame(&mut stream).expect("read").expect("close");
     assert_eq!(opcode, 8);
 
     let _ = stream.shutdown(std::net::Shutdown::Both);
+    stop.store(true, Ordering::SeqCst);
+    driver.join().unwrap();
+}
+
+#[test]
+fn static_motd_override_and_noicon_queries_over_real_sockets() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let pixels = [17, 34, 51, 68].repeat(4096);
+    let mut png = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png, 64, 64);
+        encoder.set_color(png::ColorType::Rgba);
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&pixels).unwrap();
+    }
+    let config = Config {
+        motd_icon: Some(format!("data:image/png;base64,{}", STANDARD.encode(png))),
+        ..test_config()
+    };
+    let (port, stop, driver) = start_runtime(config);
+    for (query, icon) in [
+        ("Accept: MOTD", true),
+        ("Accept: MOTD.noicon", false),
+        ("accept: motd.cache.noicon", false),
+    ] {
+        let mut stream = upgrade(port);
+        send_frame(&mut stream, 1, query.as_bytes()).unwrap();
+        let (opcode, data) = recv_frame(&mut stream).unwrap().unwrap();
+        assert_eq!(opcode, 1);
+        let response: serde_json::Value = serde_json::from_slice(&data).unwrap();
+        assert_eq!(response["data"]["icon"], icon);
+        if icon {
+            let (opcode, data) = recv_frame(&mut stream).unwrap().unwrap();
+            assert_eq!(opcode, 2);
+            assert_eq!(data, pixels);
+        }
+        assert_eq!(recv_frame(&mut stream).unwrap().unwrap().0, 8);
+    }
     stop.store(true, Ordering::SeqCst);
     driver.join().unwrap();
 }

@@ -7,19 +7,17 @@ mod session;
 mod skins;
 mod ui;
 
-/// Server icon for EaglerXPumpkin, embedded from the repository image
-/// (`EaglerXPumkin.png`) as base64 so MOTD/server-list answers can override the
-/// backend's default icon without any runtime fetch.
-pub const EAGLER_ICON: &[u8] = include_bytes!("../../../../EaglerXPumpkin.png");
+mod motd_icon;
 
-/// Built-in MOTD/server icon for EaglerXPumpkin: the repository's
-/// `EaglerXPumpkin.png` as a base64 data URI, used when no admin override is
-/// configured.
-pub fn builtin_motd_icon() -> String {
-    format!(
-        "data:image/png;base64,{}",
-        eagler_ws::base64_encode(EAGLER_ICON)
-    )
+/// The repository logo resized to 64x64 for Eagler server-list queries.
+pub const EAGLER_ICON: &[u8] = include_bytes!("../assets/motd-icon.png");
+
+/// Built-in server icon as 4096 RGBA pixels in Eagler wire order.
+pub fn builtin_motd_icon() -> Vec<u8> {
+    static PIXELS: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    PIXELS
+        .get_or_init(|| motd_icon::decode_png(EAGLER_ICON).expect("valid built-in MOTD icon"))
+        .clone()
 }
 
 #[cfg(target_os = "wasi")]

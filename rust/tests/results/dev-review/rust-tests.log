@@ -1,0 +1,97 @@
+   Compiling eaglerx-pumpkin v0.1.0 (/home/thomass/EaglerXPumkin/rust/crates/eaglerx-pumpkin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running unittests src/lib.rs (target/aarch64-unknown-linux-gnu/debug/build/eagler-ws/4166abe23e3057ca/out/eagler_ws-4166abe23e3057ca)
+
+running 9 tests
+test tests::b64_rfc4648 ... ok
+test tests::frame_roundtrip ... ok
+test tests::incremental_decoder_retains_fragments_between_polls ... ok
+test tests::rejects_invalid_client_frames ... ok
+test tests::fragmented_messages_survive_partial_reads_and_interleaved_ping ... ok
+test tests::sha1_rfc_vectors ... ok
+test tests::upgrade_matches_rfc_example_and_rejects_missing_headers ... ok
+test tests::extended_lengths_and_large_binary_messages ... ok
+test tests::frame_codec_micro_benchmark ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running unittests src/lib.rs (target/aarch64-unknown-linux-gnu/debug/build/eaglerx-pumpkin/fff1286ae2858fe9/out/eaglerx_pumpkin-fff1286ae2858fe9)
+
+running 44 tests
+test config::tests::zero_rate_limit_and_report_interval_disable_them ... ok
+test config::tests::motd_animation_config_ranges_are_validated ... ok
+test config::tests::rejects_out_of_range_diagnostics_settings ... ok
+test ip_filter::tests::invalid_rules_are_rejected ... ok
+test config::tests::pause_menu_and_notification_config_is_optional_and_validated ... ok
+test ip_filter::tests::parses_cidr_and_exact_rules ... ok
+test ip_filter::tests::empty_allow_list_permits_everything_but_blocks_still_apply ... ok
+test config::tests::rejects_invalid_ip_filter_entries ... ok
+test config::tests::partial_config_keeps_new_defaults ... ok
+test ip_filter::tests::zero_prefix_and_ipv4_mapped_addresses ... ok
+test minecraft::tests::rejects_hostile_lengths_and_compression ... ok
+test runtime::tests::rate_limit_counts_per_address_and_refills_after_the_window ... ok
+test runtime::tests::send_queue_preserves_partial_writes_and_appended_bytes ... ok
+test config::tests::minecraft_protocol_range_is_validated_and_defaults_to_exact ... ok
+test runtime::tests::zero_rate_limit_disables_tracking ... ok
+test session::tests::backend_login_waits_for_client_finish_before_replaying_configuration ... ok
+test session::tests::advertises_and_sends_configured_pause_menu_and_notification ... ok
+test session::tests::animated_motd_cycles_frames_then_closes_after_max_age ... ok
+test session::tests::initial_identity_is_used_when_nickname_selection_is_disabled ... ok
+test session::tests::login_start_matches_each_protocol_generation ... ok
+test session::tests::login_start_uses_the_selected_protocol_from_the_range ... ok
+test session::tests::mismatch_packet_advertises_the_configured_protocol_range ... ok
+test session::tests::protocol_outside_the_configured_range_receives_the_range_mismatch ... ok
+test session::tests::malformed_requests_and_backend_failures_reject_cleanly ... ok
+test session::tests::negotiates_the_highest_offered_protocol_inside_the_range ... ok
+test session::tests::registers_profile_textures_and_answers_injected_requests ... ok
+test session::tests::static_motd_query_answers_and_closes ... ok
+test session::tests::version_mismatch_and_duplicate_profiles_are_rejected ... ok
+test config::tests::motd_icon_defaults_to_the_builtin_server_icon_and_can_be_overridden ... ok
+test skins::tests::encodes_skin_cape_and_combined_textures ... ok
+test skins::tests::converts_v3_pixels_to_eagler_texture ... ok
+test skins::tests::malformed_profile_data_keeps_the_previous_texture ... ok
+test ui::tests::notification_has_text_components_and_default_colors ... ok
+test ui::tests::pause_menu_uses_external_link_mode ... ok
+test skins::tests::parses_preset_and_custom_profile_data ... ok
+test session::tests::static_motd_query_uses_configured_server_icon ... ok
+test minecraft::tests::decodes_tcp_splits_and_compression_transition ... ok
+test motd_icon::tests::expands_palette_transparency_and_strips_sixteen_bit_channels ... ok
+test motd_icon::tests::converts_png_channels_to_wire_rgba ... ok
+test runtime::tests::tracked_address_map_stays_bounded ... ok
+test motd_icon::tests::rejects_animated_png ... ok
+test motd_icon::tests::rejects_bad_images_before_serving_queries ... ok
+test session::tests::full_login_and_compression_flow_matches_each_protocol_generation ... ok
+test minecraft::tests::compression_roundtrip_large_packet ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src/main.rs (target/aarch64-unknown-linux-gnu/debug/build/eaglerx-pumpkin/ba618dbcb3aa216c/out/eaglerx_pumpkin-ba618dbcb3aa216c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gateway.rs (target/aarch64-unknown-linux-gnu/debug/build/eaglerx-pumpkin/1fcfd858f42dff65/out/gateway-1fcfd858f42dff65)
+
+running 6 tests
+test listener_binds_ephemeral_port ... ok
+test static_motd_query_over_real_sockets_returns_builtin_server_icon ... ok
+test connection_rate_limit_closes_overflow_over_real_sockets ... ok
+test static_motd_override_and_noicon_queries_over_real_sockets ... ok
+test malformed_sessions_are_rejected_without_harming_the_listener ... ok
+test animated_motd_cycles_frames_over_real_sockets_until_max_age ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+   Doc-tests eagler_ws
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests eaglerx_pumpkin
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

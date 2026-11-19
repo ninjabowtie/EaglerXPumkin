@@ -162,10 +162,11 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   tasks were replaced by one scheduler-driven poll loop.
 - [x] Record throughput/latency micro-benchmark numbers. Periodic counters now
   exist, and the frame codec micro-benchmark (`frame_codec_micro_benchmark` in
-  `crates/eagler-ws`) records encode+decode throughput and round-trip latency for
-  representative packet payloads from 64 bytes through 256 KiB. The native-host run
-  recorded roughly 38-98 MiB/s across the tested payload sizes and a ~3 ms round trip
-  for a 256 KiB body; sustained-load figures against a live backend remain open.
+  `crates/eagler-ws`) now times masked-client decoding and server-reply encoding
+  for payloads from 64 bytes through 256 KiB. The earlier 38-98 MiB/s and ~3 ms
+  measurements timed decoding only, so they are not round-trip figures. See the
+  [dev review](../rust/tests/results/dev-review/README.md) for corrected results;
+  sustained-load performance characterization against a live backend remains open.
 
 ### Phase 1 - core connect and play
 
@@ -211,8 +212,9 @@ marked done only for the 26.3 gateway; annotations record scope changes.
   client-side cache while animated. Scoped port: per-frame server icons,
   sprite sheets, weighted message pools, named message chains and the
   cache-control query subtypes of the EaglerMOTD addon are not ported. Static
-  server-list answers now carry the built-in EaglerXPumpkin server icon as a
-  base64 data URI, overridable with `motd_icon`. The
+  server-list answers now announce the built-in EaglerXPumpkin server icon with
+  a boolean and send its 64x64 RGBA pixels in a separate binary frame. `motd_icon`
+  accepts a validated 64x64 PNG data URI override; image URLs are unsupported. The
   graphical client verified so far (Gaius) uses `/tunnel` and does not
   exercise the MOTD query path. Automated unit and real-socket integration
   tests cover text cycling and max-age closure; graphical MOTD verification

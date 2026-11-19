@@ -1,0 +1,12 @@
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running unittests src/lib.rs (target/aarch64-unknown-linux-gnu/release/build/eagler-ws/32f6787d000ed631/out/eagler_ws-32f6787d000ed631)
+
+running 1 test
+frame codec micro-benchmark: payload 64 bytes, 128 decode+encode rounds -> 635778.4 payload KiB/s, 0.1 us/round
+frame codec micro-benchmark: payload 1024 bytes, 128 decode+encode rounds -> 1080551.8 payload KiB/s, 0.9 us/round
+frame codec micro-benchmark: payload 65536 bytes, 128 decode+encode rounds -> 1047848.9 payload KiB/s, 61.1 us/round
+frame codec micro-benchmark: payload 262144 bytes, 128 decode+encode rounds -> 1202445.0 payload KiB/s, 212.9 us/round
+test tests::frame_codec_micro_benchmark ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.04s
+

@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "queries": 64,
+  "concurrency": 8,
+  "with_icon": 32,
+  "without_icon": 32,
+  "checks": [
+    "boolean icon flag",
+    "text then 16384-byte binary for icons",
+    "JSON under 4096 bytes",
+    "server close frame"
+  ]
+}

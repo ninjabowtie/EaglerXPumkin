@@ -1,0 +1,23 @@
+{
+  "started_utc": "2026-11-19T00:31:21.322272+00:00",
+  "finished_utc": "2026-11-19T00:33:21.530306+00:00",
+  "requested_seconds": 120,
+  "clients": 0,
+  "fuzz_clients": 1,
+  "host": "127.0.0.1",
+  "port": 18082,
+  "final": {
+    "fuzz_rounds": 60,
+    "fuzz_bytes": 172460,
+    "fuzz_vector_0": 10,
+    "motd_queries": 24,
+    "motd_frames": 24,
+    "fuzz_vector_1": 10,
+    "fuzz_vector_2": 10,
+    "fuzz_vector_3": 10,
+    "fuzz_vector_4": 10,
+    "fuzz_vector_5": 10
+  },
+  "errors": [],
+  "passed": true
+}

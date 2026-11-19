@@ -29,14 +29,17 @@ bidirectional relay. Malformed requests, backend login failures and unsupported
 versions are covered separately. These simulated packets do not establish
 real-client gameplay compatibility for every admitted protocol.
 
-The `eagler-ws` frame codec micro-benchmark (`frame_codec_micro_benchmark`) records
-encode+decode throughput and round-trip latency for representative packet
-payloads (64 B through 256 KiB) as part of the native Rust suite. See the
-[Phase 0 roadmap](PUMPKIN_PORT_PLAN.md) for the recorded numbers.
+The `eagler-ws` frame codec micro-benchmark (`frame_codec_micro_benchmark`) times
+masked-client decoding and server-reply encoding for payloads from 64 B through
+256 KiB. It reports payload throughput and mean time per iteration, excluding
+network/backend work. Earlier recorded measurements timed decoding only.
+See the [dev review](../rust/tests/results/dev-review/README.md) for corrected
+validation results.
 
 The real-socket integration suite also answers a static MOTD query over a live
 WebSocket and checks that the response carries the built-in EaglerXPumpkin
-server icon as a base64 data URI. See the
+server icon as a boolean JSON flag followed by a separate 16384-byte RGBA
+binary frame. Custom PNG data URI overrides and no-icon queries are also covered. See the
 [MOTD and animations](../rust/README.md#motd-and-animations) section for the
 icon behaviour and the `motd_icon` override.
 

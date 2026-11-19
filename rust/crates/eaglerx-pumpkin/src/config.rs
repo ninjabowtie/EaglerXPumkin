@@ -40,10 +40,7 @@ pub struct Config {
     pub motd_frames: Vec<String>,
     pub motd_interval_ms: u16,
     pub motd_close_after_ms: u32,
-    /// Optional server icon (image URL or data URI) for MOTD/server-list
-    /// answers. `None` selects the built-in EaglerXPumpkin icon embedded from
-    /// the repository, so browser (EaglerCraft) clients see the EaglerXPumpkin
-    /// server icon instead of the backend default.
+    /// Optional 64x64 PNG data URI. None selects the embedded project icon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub motd_icon: Option<String>,
 }
@@ -201,13 +198,8 @@ impl Config {
         if self.motd_close_after_ms > 3_600_000 {
             return Err("motd_close_after_ms must be at most 3600000".into());
         }
-        if let Some(icon) = &self.motd_icon
-            && (icon.is_empty() || icon.len() > 2_097_152 || !icon.is_ascii())
-        {
-            return Err(
-                "motd_icon must be a non-empty ASCII image URL or data URI of at most 2097152 bytes"
-                    .into(),
-            );
+        if let Some(icon) = &self.motd_icon {
+            crate::motd_icon::decode_data_uri(icon)?;
         }
         if !self.motd_frames.is_empty() {
             if self.motd_interval_ms == 0 {
@@ -264,14 +256,12 @@ impl Config {
             Duration::from_millis(u64::from(self.motd_close_after_ms)),
         ))
     }
-    /// Server icon for MOTD/server-list answers: the admin-configured override
-    /// when set, otherwise the built-in EaglerXPumpkin icon embedded from the
-    /// repository image. The gateway answers EaglerCraft (Eagler) queries, so
-    /// this applies only to clients arriving through the gateway listener.
-    pub fn motd_icon(&self) -> String {
-        self.motd_icon
-            .clone()
-            .unwrap_or_else(crate::builtin_motd_icon)
+    /// Server icon as 64x64 RGBA pixels, never a URL in the JSON response.
+    pub fn motd_icon(&self) -> Result<Vec<u8>, String> {
+        match &self.motd_icon {
+            Some(icon) => crate::motd_icon::decode_data_uri(icon),
+            None => Ok(crate::builtin_motd_icon()),
+        }
     }
 }
 
@@ -437,18 +427,23 @@ mod tests {
     fn motd_icon_defaults_to_the_builtin_server_icon_and_can_be_overridden() {
         let config = Config::default();
         assert!(config.motd_icon.is_none());
-        assert!(config.motd_icon().starts_with("data:image/png;base64,"));
+        assert_eq!(config.motd_icon().unwrap(), crate::builtin_motd_icon());
 
         let override_config = Config {
-            motd_icon: Some("https://example.com/eaglerxpumpkin.png".into()),
+            motd_icon: Some(crate::motd_icon::tests::test_icon_uri()),
             ..Config::default()
         };
+        override_config.validate().unwrap();
         assert_eq!(
-            override_config.motd_icon(),
-            "https://example.com/eaglerxpumpkin.png"
+            override_config.motd_icon().unwrap(),
+            [17, 34, 51, 68].repeat(4096)
         );
 
         for bad in [
+            Config {
+                motd_icon: Some("https://example.com/icon.png".into()),
+                ..Config::default()
+            },
             Config {
                 motd_icon: Some(String::new()),
                 ..Config::default()

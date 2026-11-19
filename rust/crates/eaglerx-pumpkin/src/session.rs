@@ -91,7 +91,7 @@ fn ascii(out: &mut Vec<u8>, text: &str) {
 /// caching (so the browser re-queries the sequence) and carry the reference's
 /// epoch-millisecond timestamp; static answers keep the verified shape and use
 /// the configured server icon, defaulting to the built-in EaglerXPumpkin icon.
-fn motd_frame(cfg: &Config, online: usize, frame: &[&str], animated: bool) -> Vec<u8> {
+fn motd_frame(cfg: &Config, online: usize, frame: &[&str], animated: bool, icon: bool) -> Vec<u8> {
     let time = if animated {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -99,11 +99,6 @@ fn motd_frame(cfg: &Config, online: usize, frame: &[&str], animated: bool) -> Ve
             .unwrap_or(0)
     } else {
         0
-    };
-    let icon = if animated {
-        serde_json::Value::Bool(false)
-    } else {
-        serde_json::json!(cfg.motd_icon())
     };
     serde_json::json!({
         "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
@@ -240,7 +235,7 @@ impl Session {
         let lines: Vec<&str> = cfg.motd_frames[frame].lines().take(2).collect();
         self.client_output.push(Message {
             opcode: OP_TEXT,
-            payload: motd_frame(cfg, online, &lines, true),
+            payload: motd_frame(cfg, online, &lines, true, false),
         });
     }
     /// Advance the MOTD animation one poll: cycle to the next frame when the
@@ -339,16 +334,18 @@ impl Session {
                 self.stage = Stage::Motd;
                 return Ok(());
             }
-            let response = serde_json::json!({
-                "name": "EaglerXPumpkin", "brand": "EaglerXPumpkin", "vers": env!("CARGO_PKG_VERSION"),
-                "cracked": true, "secure": false, "type": "motd", "time": 0,
-                "data": { "motd": cfg.motd.lines().take(2).collect::<Vec<_>>(), "cache": true,
-                    "icon": cfg.motd_icon(), "online": online, "max": cfg.max_connections, "players": [] }
+            let lines: Vec<_> = cfg.motd.lines().take(2).collect();
+            let no_icon = request.split_once('.').is_some_and(|(_, subtype)| {
+                let subtype = subtype.to_ascii_lowercase();
+                subtype.starts_with("noicon") || subtype.starts_with("cache.noicon")
             });
             self.client_output.push(Message {
                 opcode: OP_TEXT,
-                payload: response.to_string().into_bytes(),
+                payload: motd_frame(cfg, online, &lines, false, !no_icon),
             });
+            if !no_icon {
+                self.send(cfg.motd_icon()?);
+            }
             self.closing = true;
             return Ok(());
         }
@@ -1226,15 +1223,17 @@ mod tests {
         assert!(text.contains("\"cache\":true"));
         assert!(text.contains("\"online\":2"));
         assert!(text.contains("Minecraft 26.3"));
-        // Static answers carry the built-in EaglerXPumpkin server icon as a
-        // base64 data URI unless the admin overrides motd_icon.
-        assert!(text.contains("\"icon\":\"data:image/png;base64,"));
+        let response: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(response["data"]["icon"], true);
+        assert_eq!(session.client_output.len(), 2);
+        assert_eq!(session.client_output[1].opcode, OP_BIN);
+        assert_eq!(session.client_output[1].payload, crate::builtin_motd_icon());
     }
 
     #[test]
     fn static_motd_query_uses_configured_server_icon() {
         let cfg = Config {
-            motd_icon: Some("https://example.com/eaglerxpumpkin.png".into()),
+            motd_icon: Some(crate::motd_icon::tests::test_icon_uri()),
             ..Config::default()
         };
         let mut session = Session::default();
@@ -1252,8 +1251,14 @@ mod tests {
             .unwrap();
         assert!(session.closing);
         let text = String::from_utf8(session.client_output[0].payload.clone()).unwrap();
-        assert!(text.contains("\"icon\":\"https://example.com/eaglerxpumpkin.png\""));
-        assert!(!text.contains("data:image/png;base64,"));
+        let response: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(response["data"]["icon"], true);
+        assert_eq!(session.client_output.len(), 2);
+        assert_eq!(session.client_output[1].opcode, OP_BIN);
+        assert_eq!(
+            session.client_output[1].payload,
+            [17, 34, 51, 68].repeat(4096)
+        );
     }
 
     #[test]

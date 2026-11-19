@@ -1,0 +1,21 @@
+{
+  "reviewed_dev": "b74eb991fbb3e44e990eebe8311c06d3b0ee9487",
+  "base_main": "c2d902241f231c5c2915a85441eba2aae046c58b",
+  "native_gateway": "rebuilt from reviewed worktree; same shared runtime as WASI; port 18082",
+  "route": "native gateway 127.0.0.1:18082 -> existing Multiversion :25565 -> existing Pumpkin :25566",
+  "connections_per_minute": 0,
+  "graphical_client_tested": false,
+  "wasi_artifact_built": true,
+  "wasi_artifact_loaded_into_host": false,
+  "backend_versions_reestablished": false,
+  "icon_generation_reproducible": true,
+  "sha256": {
+    "target/aarch64-unknown-linux-gnu/debug/eaglerx-pumpkin": "fe35c17caa1c0eb4be70c8dd3cbf3d499c91bd762ae852b430b40c5281f49046",
+    "dist/EaglerXPumpkin.wasm": "d8e1c1f478486a66b246ba9da2fad08b301f25a8284b34eb8b17832daee7eda1",
+    "crates/eaglerx-pumpkin/assets/motd-icon.png": "0d7666b21cff18981b475375222f7e089dceec5969e60bf4bdbb78ae0808e6aa",
+    "/tmp/MOTDConnectionWrapper.java": "df8eb4d204a22d2eb156dfa99b0e0b7f93a3de0a59ca1e70ec1d48f8202e7caa",
+    "/tmp/ServerIconLoader.java": "37c3b84105681660e5d78c2459e7af8f6e190c0e9f7ac022c24be88d8322be5a"
+  },
+  "temporary_gateway_stopped": true,
+  "live_config": "listen_port = 18082\nlisten_address = \"127.0.0.1\"\nbackend_port = 25565\nmin_minecraft_protocol = 755\nmax_minecraft_protocol = 777\nconnections_per_minute = 0\n"
+}

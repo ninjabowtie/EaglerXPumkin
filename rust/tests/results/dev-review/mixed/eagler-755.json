@@ -1,0 +1,13 @@
+{
+  "protocol": 755,
+  "joined": true,
+  "positioned": true,
+  "keepalive": true,
+  "chat_echo": true,
+  "chunks": 118,
+  "total_packets": 22443,
+  "sustained": true,
+  "requested_seconds": 120,
+  "play_seconds": 120.0,
+  "keepalive_replies": 7
+}

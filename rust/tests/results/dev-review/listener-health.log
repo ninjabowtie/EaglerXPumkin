@@ -1,0 +1,36 @@
+soak 10s: {"fuzz_rounds": 5, "fuzz_bytes": 17074, "fuzz_vector_0": 1, "motd_queries": 2, "motd_frames": 2, "fuzz_vector_1": 1, "fuzz_vector_2": 1, "fuzz_vector_3": 1, "fuzz_vector_4": 1}
+soak 20s: {"fuzz_rounds": 10, "fuzz_bytes": 34165, "fuzz_vector_0": 2, "motd_queries": 4, "motd_frames": 4, "fuzz_vector_1": 2, "fuzz_vector_2": 2, "fuzz_vector_3": 2, "fuzz_vector_4": 1, "fuzz_vector_5": 1}
+soak 30s: {"fuzz_rounds": 15, "fuzz_bytes": 51245, "fuzz_vector_0": 3, "motd_queries": 6, "motd_frames": 6, "fuzz_vector_1": 3, "fuzz_vector_2": 3, "fuzz_vector_3": 2, "fuzz_vector_4": 2, "fuzz_vector_5": 2}
+soak 40s: {"fuzz_rounds": 20, "fuzz_bytes": 51738, "fuzz_vector_0": 4, "motd_queries": 8, "motd_frames": 8, "fuzz_vector_1": 4, "fuzz_vector_2": 3, "fuzz_vector_3": 3, "fuzz_vector_4": 3, "fuzz_vector_5": 3}
+soak 50s: {"fuzz_rounds": 25, "fuzz_bytes": 68984, "fuzz_vector_0": 5, "motd_queries": 10, "motd_frames": 10, "fuzz_vector_1": 4, "fuzz_vector_2": 4, "fuzz_vector_3": 4, "fuzz_vector_4": 4, "fuzz_vector_5": 4}
+soak 60s: {"fuzz_rounds": 30, "fuzz_bytes": 86230, "fuzz_vector_0": 5, "motd_queries": 12, "motd_frames": 12, "fuzz_vector_1": 5, "fuzz_vector_2": 5, "fuzz_vector_3": 5, "fuzz_vector_4": 5, "fuzz_vector_5": 5}
+soak 70s: {"fuzz_rounds": 35, "fuzz_bytes": 103304, "fuzz_vector_0": 6, "motd_queries": 14, "motd_frames": 14, "fuzz_vector_1": 6, "fuzz_vector_2": 6, "fuzz_vector_3": 6, "fuzz_vector_4": 6, "fuzz_vector_5": 5}
+soak 80s: {"fuzz_rounds": 40, "fuzz_bytes": 120395, "fuzz_vector_0": 7, "motd_queries": 16, "motd_frames": 16, "fuzz_vector_1": 7, "fuzz_vector_2": 7, "fuzz_vector_3": 7, "fuzz_vector_4": 6, "fuzz_vector_5": 6}
+soak 90s: {"fuzz_rounds": 45, "fuzz_bytes": 137475, "fuzz_vector_0": 8, "motd_queries": 18, "motd_frames": 18, "fuzz_vector_1": 8, "fuzz_vector_2": 8, "fuzz_vector_3": 7, "fuzz_vector_4": 7, "fuzz_vector_5": 7}
+soak 100s: {"fuzz_rounds": 50, "fuzz_bytes": 137968, "fuzz_vector_0": 9, "motd_queries": 20, "motd_frames": 20, "fuzz_vector_1": 9, "fuzz_vector_2": 8, "fuzz_vector_3": 8, "fuzz_vector_4": 8, "fuzz_vector_5": 8}
+soak 110s: {"fuzz_rounds": 55, "fuzz_bytes": 155214, "fuzz_vector_0": 10, "motd_queries": 22, "motd_frames": 22, "fuzz_vector_1": 9, "fuzz_vector_2": 9, "fuzz_vector_3": 9, "fuzz_vector_4": 9, "fuzz_vector_5": 9}
+soak 120s: {"fuzz_rounds": 60, "fuzz_bytes": 172460, "fuzz_vector_0": 10, "motd_queries": 24, "motd_frames": 24, "fuzz_vector_1": 10, "fuzz_vector_2": 10, "fuzz_vector_3": 10, "fuzz_vector_4": 10, "fuzz_vector_5": 10}
+{
+  "started_utc": "2026-11-19T00:31:21.322272+00:00",
+  "finished_utc": "2026-11-19T00:33:21.530306+00:00",
+  "requested_seconds": 120,
+  "clients": 0,
+  "fuzz_clients": 1,
+  "host": "127.0.0.1",
+  "port": 18082,
+  "final": {
+    "fuzz_rounds": 60,
+    "fuzz_bytes": 172460,
+    "fuzz_vector_0": 10,
+    "motd_queries": 24,
+    "motd_frames": 24,
+    "fuzz_vector_1": 10,
+    "fuzz_vector_2": 10,
+    "fuzz_vector_3": 10,
+    "fuzz_vector_4": 10,
+    "fuzz_vector_5": 10
+  },
+  "errors": [],
+  "passed": true
+}
+soak passed

@@ -1,0 +1,9 @@
+    Checking regex-syntax v0.8.12
+    Checking lazy_static v1.5.1
+    Checking thread_local v1.1.10
+    Checking sharded-slab v0.1.7
+    Checking regex-automata v0.4.19
+    Checking matchers v0.2.0
+    Checking tracing-subscriber v0.3.23
+    Checking eaglerx-pumpkin v0.1.0 (/home/thomass/EaglerXPumkin/rust/crates/eaglerx-pumpkin)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.25s

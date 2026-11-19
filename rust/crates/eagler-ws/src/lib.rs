@@ -137,7 +137,10 @@ pub fn handshake(inner: &mut (impl Read + Write)) -> Result<(), HandshakeError> 
     let mut buf = Vec::with_capacity(1024);
     let mut byte = [0u8; 1];
     loop {
-        let n = inner.read(&mut byte)?;
+        let n = match inner.read(&mut byte) {
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
         if n == 0 {
             return Err(HandshakeError::NotWebSocket); // closed mid-request
         }
@@ -244,13 +247,19 @@ pub struct Message {
 #[derive(Default)]
 pub struct Decoder {
     buf: Vec<u8>,
+    offset: usize,
     fragmented: Option<Message>,
 }
 
 impl Decoder {
     pub fn push(&mut self, bytes: &[u8]) -> Result<(), WsError> {
-        if self.buf.len() + bytes.len() > MAX_MESSAGE_SIZE + 14 {
+        if self.buf.len() - self.offset + bytes.len() > MAX_MESSAGE_SIZE + 14 {
             return Err(WsError::Protocol("receive buffer too large"));
+        }
+        if self.offset > 0 {
+            self.buf.copy_within(self.offset.., 0);
+            self.buf.truncate(self.buf.len() - self.offset);
+            self.offset = 0;
         }
         self.buf.extend_from_slice(bytes);
         Ok(())
@@ -258,10 +267,15 @@ impl Decoder {
 
     pub fn next_message(&mut self) -> Result<Option<Message>, WsError> {
         loop {
-            let Some((opcode, fin, payload, consumed)) = try_parse_frame(&self.buf)? else {
+            let Some((opcode, fin, payload, consumed)) = try_parse_frame(&self.buf[self.offset..])?
+            else {
                 return Ok(None);
             };
-            self.buf.drain(..consumed);
+            self.offset += consumed;
+            if self.offset == self.buf.len() {
+                self.buf.clear();
+                self.offset = 0;
+            }
             if opcode >= OP_CLOSE {
                 if opcode == OP_CLOSE && payload.len() >= 2 {
                     let code = u16::from_be_bytes([payload[0], payload[1]]);
@@ -506,6 +520,82 @@ mod tests {
         frame.extend_from_slice(&mask);
         frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
         frame
+    }
+
+    #[test]
+    fn blocking_handshake_retries_interrupted_reads() {
+        struct Duplex {
+            input: std::io::Cursor<Vec<u8>>,
+            output: Vec<u8>,
+            interrupted: bool,
+        }
+        impl Read for Duplex {
+            fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+                if !self.interrupted {
+                    self.interrupted = true;
+                    return Err(std::io::ErrorKind::Interrupted.into());
+                }
+                self.input.read(out)
+            }
+        }
+        impl Write for Duplex {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.output.write(data)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut stream = Duplex {
+            input: std::io::Cursor::new(b"GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n".to_vec()),
+            output: Vec::new(), interrupted: false,
+        };
+        handshake(&mut stream).unwrap();
+        assert!(stream.output.starts_with(b"HTTP/1.1 101"));
+    }
+
+    #[test]
+    fn coalesced_frames_and_partial_tails_survive_compaction() {
+        let mut wire = Vec::new();
+        for n in 1..=100 {
+            wire.extend_from_slice(&[0x82, 0x80 | n, 0, 0, 0, 0]);
+            wire.extend(std::iter::repeat_n(n, n as usize));
+        }
+        for chunk_size in [1, 7, 4096] {
+            let mut decoder = Decoder::default();
+            let mut received = Vec::new();
+            for chunk in wire.chunks(chunk_size) {
+                decoder.push(chunk).unwrap();
+                while let Some(message) = decoder.next_message().unwrap() {
+                    received.push(message.payload);
+                }
+            }
+            let expected: Vec<_> = (1..=100).map(|n| vec![n; n as usize]).collect();
+            assert_eq!(received, expected);
+        }
+    }
+
+    #[test]
+    #[ignore = "manual coalesced-buffer performance measurement"]
+    fn coalesced_batch_benchmark() {
+        let mask = [1u8, 2, 3, 4];
+        let mut frame = vec![0x82, 0xc0];
+        frame.extend_from_slice(&mask);
+        frame.extend((0..64).map(|i| 42 ^ mask[i % 4]));
+        let bytes = frame.repeat(10000);
+        let start = std::time::Instant::now();
+        for _ in 0..3 {
+            let mut decoder = Decoder::default();
+            decoder.push(&bytes).unwrap();
+            for _ in 0..10000 {
+                assert_eq!(decoder.next_message().unwrap().unwrap().payload, [42; 64]);
+            }
+            assert!(decoder.next_message().unwrap().is_none());
+        }
+        eprintln!(
+            "WebSocket 30000 coalesced 64-byte frames: {:?}",
+            start.elapsed()
+        );
     }
 
     #[test]

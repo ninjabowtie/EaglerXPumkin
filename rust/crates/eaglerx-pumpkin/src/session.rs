@@ -259,10 +259,12 @@ impl Session {
         }
         let expired = match &self.motd {
             Some(anim) => {
-                if now < anim.next_frame {
+                if now.saturating_duration_since(anim.started) < anim.close_after
+                    && now < anim.next_frame
+                {
                     return;
                 }
-                now.duration_since(anim.started) >= anim.close_after
+                now.saturating_duration_since(anim.started) >= anim.close_after
             }
             None => return,
         };
@@ -284,6 +286,15 @@ impl Session {
         if self.closing {
             return;
         }
+        // Bound both logging and serialization while preserving UTF-8/JSON.
+        // JSON escaping takes at most six bytes per source byte, so this
+        // prefix remains below the protocol's 65535-byte disconnect limit.
+        let limit = if self.version >= 3 { 8192 } else { 255 };
+        let mut end = reason.len().min(limit);
+        while !reason.is_char_boundary(end) {
+            end -= 1;
+        }
+        let reason = &reason[..end];
         tracing::warn!("Eagler session failed: {reason}");
         if self.stage == Stage::Play {
             self.closing = true;
@@ -294,18 +305,14 @@ impl Session {
         } else {
             reason.to_string()
         };
-        let text = &text.as_bytes()[..text.len().min(65535)];
+        let text = text.as_bytes();
         let mut packet = vec![0xff, 8];
         if self.version >= 3 {
             packet.extend_from_slice(&(text.len() as u16).to_be_bytes());
         } else {
-            packet.push(text.len().min(255) as u8);
+            packet.push(text.len() as u8);
         }
-        packet.extend_from_slice(if self.version >= 3 {
-            text
-        } else {
-            &text[..text.len().min(255)]
-        });
+        packet.extend_from_slice(text);
         self.send(packet);
         self.closing = true;
     }
@@ -730,6 +737,54 @@ mod tests {
         );
         (session, cfg, store)
     }
+    #[test]
+    fn long_disconnect_reasons_remain_valid_utf8_and_json() {
+        for reason in ["🙂".repeat(20000), "\n\"\\".repeat(30000)] {
+            let mut session = Session {
+                version: 5,
+                ..Default::default()
+            };
+            session.fail(&reason);
+            let packet = &session.client_output[0].payload;
+            assert_eq!(&packet[..2], &[0xff, 8]);
+            let length = u16::from_be_bytes([packet[2], packet[3]]) as usize;
+            assert_eq!(length, packet.len() - 4);
+            let component: serde_json::Value = serde_json::from_slice(&packet[4..]).unwrap();
+            let text = component["text"].as_str().unwrap();
+            assert!(reason.starts_with(text));
+            assert!(text.len() <= 8192);
+        }
+    }
+
+    #[test]
+    fn motd_max_age_is_independent_of_next_frame_deadline() {
+        let cfg = Config {
+            motd_frames: vec!["Frame".into()],
+            motd_interval_ms: 100,
+            motd_close_after_ms: 250,
+            ..Default::default()
+        };
+        let mut session = Session::default();
+        session
+            .client_message(
+                Message {
+                    opcode: OP_TEXT,
+                    payload: b"Accept: MOTD".to_vec(),
+                },
+                &cfg,
+                0,
+                &mut SkinStore::default(),
+            )
+            .unwrap();
+        let start = session.motd.as_ref().unwrap().started;
+        session.motd_tick(&cfg, 0, start + Duration::from_millis(200));
+        session.motd_tick(&cfg, 0, start + Duration::from_millis(250));
+        assert!(
+            session.closing,
+            "max age must not wait for next animation frame"
+        );
+    }
+
     #[test]
     fn dynamic_notification_capabilities_and_recipient_gates() {
         let mut cfg = Config::default();

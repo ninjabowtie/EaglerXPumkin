@@ -226,7 +226,7 @@ impl SkinStore {
 }
 
 fn encode_skin(request_id: i32, skin: &Skin) -> Vec<u8> {
-    let mut out = Vec::with_capacity(6 + SKIN_BYTES);
+    let mut out = Vec::new();
     match skin {
         Skin::Preset(id) => {
             out.push(PACKET_OTHER_SKIN_PRESET);
@@ -234,6 +234,7 @@ fn encode_skin(request_id: i32, skin: &Skin) -> Vec<u8> {
             mc::varint(&mut out, *id);
         }
         Skin::Custom { model, pixels } => {
+            out.reserve(7 + SKIN_BYTES);
             out.push(PACKET_OTHER_SKIN_CUSTOM);
             mc::varint(&mut out, request_id);
             out.push(*model);
@@ -244,7 +245,7 @@ fn encode_skin(request_id: i32, skin: &Skin) -> Vec<u8> {
 }
 
 fn encode_cape(request_id: i32, cape: &Cape) -> Vec<u8> {
-    let mut out = Vec::with_capacity(6 + CAPE_BYTES);
+    let mut out = Vec::new();
     match cape {
         Cape::Preset(id) => {
             out.push(PACKET_OTHER_CAPE_PRESET);
@@ -252,6 +253,7 @@ fn encode_cape(request_id: i32, cape: &Cape) -> Vec<u8> {
             mc::varint(&mut out, *id);
         }
         Cape::Custom(pixels) => {
+            out.reserve(6 + CAPE_BYTES);
             out.push(PACKET_OTHER_CAPE_CUSTOM);
             mc::varint(&mut out, request_id);
             out.extend_from_slice(pixels);

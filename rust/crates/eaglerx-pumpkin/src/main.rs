@@ -11,6 +11,13 @@ fn main() {
         eprintln!("Usage: eaglerx-pumpkin [eagler.toml]");
         std::process::exit(2);
     }
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
     let result = Config::load(&path).and_then(|cfg| Runtime::bind(cfg).map_err(|e| e.to_string()));
     let mut runtime = match result {
         Ok(runtime) => runtime,

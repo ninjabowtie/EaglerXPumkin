@@ -201,7 +201,8 @@ for public deployments and load tests.
 HTTP/Eagler login deadline; partial traffic does not extend it. Established
 Gaius tunnels, raw TCP relays and MOTD animations are exempt from this deadline.
 `idle_timeout_secs` (default `300`, range `1..86400`) closes any connection with
-no traffic for that duration. Both settings must be positive; existing configs
+no traffic for that duration. Both settings must be positive. Outbound traffic, including animated MOTD frames,
+refreshes the inactivity timer; the animation max age remains an absolute deadline. Existing configs
 retain the defaults. Restart/reload after changing them.
 
 `ip_allowlist` and `ip_blocklist` accept exact addresses or CIDR ranges (IPv4 or
@@ -230,9 +231,14 @@ debug/warn level. The counters are cumulative and reset only on plugin reload;
 use the periodic throughput figures for sustained-load measurements rather than
 wall-clock timers in the client.
 
+The native CLI writes tracing logs to stderr at `info` level by default. Set
+`RUST_LOG=debug` for connection details, or `RUST_LOG=warn` for warnings only.
+Missing or invalid filters fall back to `info`. The WASI plugin continues to
+use Pumpkin's logging integration.
+
 ## MOTD and animations
 
-The `motd` string answers Eagler server-list queries with up to two lines and
+The `motd` string (at most 2048 UTF-8 bytes) answers Eagler server-list queries with up to two lines and
 is sent once per query with `"cache": true`, after which the query connection
 closes.
 
@@ -399,7 +405,7 @@ loop with a background poller thread. No Pumpkin backend is
 required for those paths. Session tests cover every protocol 755–777 with
 compression disabled or enabled at thresholds 1 and 256, including login
 injection, Login Acknowledged, buffering and packet relay. The native suite
-is covered by the validation results in [the dev review](tests/results/dev-review/README.md).
+is covered by the validation results in [the deep sweep](tests/results/deep-sweep/README.md).
 
 From the repository root, run the Python tests without a server:
 

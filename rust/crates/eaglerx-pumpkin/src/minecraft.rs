@@ -1,7 +1,7 @@
 //! Minecraft TCP framing and compression. Eagler messages carry packet bodies,
 //! whereas the backend expects VarInt lengths and negotiated zlib compression.
-use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
-use std::io::{Read, Write};
+use flate2::{Compression, Decompress, FlushDecompress, Status, write::ZlibEncoder};
+use std::io::Write;
 
 pub const MAX_PACKET: usize = 8 * 1024 * 1024;
 pub type Result<T> = std::result::Result<T, String>;
@@ -91,81 +91,216 @@ impl<'a> Reader<'a> {
 #[derive(Default)]
 pub struct Codec {
     input: Vec<u8>,
+    offset: usize,
     pub compression: Option<usize>,
 }
 impl Codec {
     pub fn push(&mut self, bytes: &[u8]) -> Result<()> {
-        if self.input.len() + bytes.len() > MAX_PACKET + 65536 {
+        if self.input.len() - self.offset + bytes.len() > MAX_PACKET + 65536 {
             return Err("backend receive buffer too large".into());
+        }
+        // Compact at most once per incoming read, never once per packet.
+        if self.offset > 0 {
+            self.input.copy_within(self.offset.., 0);
+            self.input.truncate(self.input.len() - self.offset);
+            self.offset = 0;
         }
         self.input.extend_from_slice(bytes);
         Ok(())
     }
     pub fn next_packet(&mut self) -> Result<Option<Vec<u8>>> {
-        let Some((len, offset)) = read_varint(&self.input)? else {
+        let Some((len, header)) = read_varint(&self.input[self.offset..])? else {
             return Ok(None);
         };
         if len <= 0 || len as usize > MAX_PACKET {
             return Err("invalid backend packet length".into());
         }
-        let end = offset + len as usize;
+        let start = self.offset + header;
+        let end = start + len as usize;
         if self.input.len() < end {
             return Ok(None);
         }
-        let data = self.input[offset..end].to_vec();
-        self.input.drain(..end);
-        let Some(threshold) = self.compression else {
-            return Ok(Some(data));
-        };
-        let (size, offset) = read_varint(&data)?.ok_or("missing uncompressed length")?;
-        if size == 0 {
-            if data.len() - offset >= threshold && threshold != 0 {
-                return Err("uncompressed packet exceeds threshold".into());
-            }
-            return Ok(Some(data[offset..].to_vec()));
+        let packet = decode_body(&self.input[start..end], self.compression)?;
+        self.offset = end;
+        if self.offset == self.input.len() {
+            self.input.clear();
+            self.offset = 0;
         }
-        if size < 0 || size as usize > MAX_PACKET || (size as usize) < threshold {
-            return Err("invalid uncompressed length".into());
-        }
-        let mut decoder = ZlibDecoder::new(&data[offset..]);
-        let mut out = Vec::new();
-        (&mut decoder)
-            .take(size as u64 + 1)
-            .read_to_end(&mut out)
-            .map_err(|e| e.to_string())?;
-        if out.len() != size as usize || decoder.total_in() as usize != data.len() - offset {
-            return Err("compressed packet length mismatch".into());
-        }
-        Ok(Some(out))
+        Ok(Some(packet))
     }
     pub fn encode(&self, packet: &[u8]) -> Result<Vec<u8>> {
         if packet.is_empty() || packet.len() > MAX_PACKET {
             return Err("invalid Minecraft packet size".into());
         }
+        let Some(threshold) = self.compression else {
+            let mut framed = Vec::with_capacity(packet.len() + 5);
+            varint(&mut framed, packet.len() as i32);
+            framed.extend_from_slice(packet);
+            return Ok(framed);
+        };
         let mut data = Vec::new();
-        if let Some(threshold) = self.compression {
-            if packet.len() >= threshold {
-                varint(&mut data, packet.len() as i32);
-                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
-                encoder.write_all(packet).map_err(|e| e.to_string())?;
-                data.extend(encoder.finish().map_err(|e| e.to_string())?);
-            } else {
-                data.push(0);
-                data.extend_from_slice(packet);
-            }
+        if packet.len() >= threshold {
+            varint(&mut data, packet.len() as i32);
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+            encoder.write_all(packet).map_err(|e| e.to_string())?;
+            data.extend(encoder.finish().map_err(|e| e.to_string())?);
         } else {
+            data.push(0);
             data.extend_from_slice(packet);
         }
-        let mut framed = Vec::new();
+        if data.len() > MAX_PACKET {
+            return Err("encoded Minecraft packet exceeds wire size limit".into());
+        }
+        let mut framed = Vec::with_capacity(data.len() + 5);
         varint(&mut framed, data.len() as i32);
         framed.extend(data);
         Ok(framed)
     }
 }
 
+/// Decode directly from receive storage without copying the compressed body.
+/// Explicit stream completion preserves checksum/trailer validation, with
+/// output bounded by the declared length and one extra byte to detect overflow.
+fn decode_body(data: &[u8], compression: Option<usize>) -> Result<Vec<u8>> {
+    let Some(threshold) = compression else {
+        return Ok(data.to_vec());
+    };
+    let (size, offset) = read_varint(data)?.ok_or("missing uncompressed length")?;
+    if size == 0 {
+        if data.len() == offset || data.len() - offset >= threshold {
+            return Err("empty or above-threshold uncompressed packet".into());
+        }
+        return Ok(data[offset..].to_vec());
+    }
+    if size < 0 || size as usize > MAX_PACKET || (size as usize) < threshold {
+        return Err("invalid uncompressed length".into());
+    }
+    let mut decoder = Decompress::new(true);
+    let mut out = Vec::with_capacity(size as usize + 1);
+    let status = decoder
+        .decompress_vec(&data[offset..], &mut out, FlushDecompress::Finish)
+        .map_err(|e| e.to_string())?;
+    if status != Status::StreamEnd
+        || out.len() != size as usize
+        || decoder.total_in() as usize != data.len() - offset
+    {
+        return Err("incomplete or mismatched compressed packet".into());
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn coalesced_packets_and_partial_tails_survive_compaction() {
+        let packets: Vec<_> = (1..=256).map(|n| vec![n as u8; n]).collect();
+        for compression in [None, Some(0), Some(128)] {
+            let mut codec = Codec {
+                compression,
+                ..Default::default()
+            };
+            let wire: Vec<_> = packets
+                .iter()
+                .flat_map(|p| codec.encode(p).unwrap())
+                .collect();
+            for chunk_size in [1, 7, 4096] {
+                let mut decoded = Vec::new();
+                for chunk in wire.chunks(chunk_size) {
+                    codec.push(chunk).unwrap();
+                    while let Some(packet) = codec.next_packet().unwrap() {
+                        decoded.push(packet);
+                    }
+                }
+                assert_eq!(decoded, packets);
+            }
+        }
+    }
+
+    #[test]
+    fn encoded_wire_size_is_bounded_and_trailing_compressed_data_is_rejected() {
+        let codec = Codec {
+            compression: Some(MAX_PACKET + 1),
+            ..Default::default()
+        };
+        assert!(codec.encode(&vec![42; MAX_PACKET]).is_err());
+        let codec = Codec {
+            compression: Some(1),
+            ..Default::default()
+        };
+        let wire = codec.encode(&[1, 2, 3]).unwrap();
+        let (_, header) = read_varint(&wire).unwrap().unwrap();
+        let mut frame = Vec::new();
+        varint(&mut frame, (wire.len() - header + 1) as i32);
+        frame.extend_from_slice(&wire[header..]);
+        frame.push(0);
+        let mut decoder = codec;
+        decoder.push(&frame).unwrap();
+        assert!(decoder.next_packet().is_err());
+    }
+
+    #[test]
+    fn rejects_truncated_zlib_and_empty_compressed_packets() {
+        let codec = Codec {
+            compression: Some(1),
+            ..Default::default()
+        };
+        let wire = codec.encode(&[1, 2, 3, 4]).unwrap();
+        let (_, header) = read_varint(&wire).unwrap().unwrap();
+        for missing in 1..=4 {
+            let body = &wire[header..wire.len() - missing];
+            let mut frame = Vec::new();
+            varint(&mut frame, body.len() as i32);
+            frame.extend_from_slice(body);
+            let mut decoder = Codec {
+                compression: Some(1),
+                ..Default::default()
+            };
+            decoder.push(&frame).unwrap();
+            assert!(
+                decoder.next_packet().is_err(),
+                "accepted zlib stream missing {missing} trailer bytes"
+            );
+        }
+        let mut decoder = Codec {
+            compression: Some(0),
+            ..Default::default()
+        };
+        decoder.push(&[1, 0]).unwrap();
+        assert!(decoder.next_packet().is_err(), "accepted empty packet body");
+    }
+
+    #[test]
+    fn compression_threshold_zero_requires_compressed_packets() {
+        let mut decoder = Codec {
+            compression: Some(0),
+            ..Default::default()
+        };
+        decoder.push(&[2, 0, 1]).unwrap();
+        assert!(decoder.next_packet().is_err());
+    }
+
+    #[test]
+    #[ignore = "manual coalesced-buffer performance measurement"]
+    fn coalesced_batch_benchmark() {
+        let encoder = Codec::default();
+        let frame = encoder.encode(&[42; 64]).unwrap();
+        let bytes = frame.repeat(10000);
+        let start = std::time::Instant::now();
+        for _ in 0..3 {
+            let mut codec = Codec::default();
+            codec.push(&bytes).unwrap();
+            for _ in 0..10000 {
+                assert_eq!(codec.next_packet().unwrap().unwrap(), [42; 64]);
+            }
+            assert!(codec.next_packet().unwrap().is_none());
+        }
+        eprintln!(
+            "Minecraft 30000 coalesced 64-byte packets: {:?}",
+            start.elapsed()
+        );
+    }
+
     #[test]
     fn decodes_tcp_splits_and_compression_transition() {
         // Fixed wire examples: packet [0x03, 0x01] enables compression at 1 byte;

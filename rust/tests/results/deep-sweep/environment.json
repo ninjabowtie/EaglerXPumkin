@@ -1,0 +1,10 @@
+{
+  "recorded_utc": "2026-11-19T03:27:09.445558+00:00",
+  "baseline_commit": "03eb2769783ebf0d5620068e54e7ab2b6a8c1018",
+  "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+  "wasm_sha256": "0eb0ed902d7f4895ffeacf1a304f78eb0b47950c5d9988077ba26b989e1866e3",
+  "pumpkin_binary_sha256": "9882aa350ee8674d12870ee7c9fa6eed387101c32c34a5f3071a9040b1c29fd3",
+  "baseline_reproduction": "Original production modules from git archive HEAD; current regression-test modules copied into /tmp; ring-buffer representation test omitted from old Vec queue. Native CLI test copied separately. No git checkout/reset/worktree mutations.",
+  "installed_server_modified": false,
+  "graphical_client_tested": false
+}

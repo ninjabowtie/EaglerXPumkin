@@ -362,3 +362,43 @@ fn stalled_handshakes_are_closed_and_listener_recovers() {
     stop.store(true, Ordering::SeqCst);
     driver.join().unwrap();
 }
+
+/// A raw client can half-close its request and still receive a multi-poll
+/// response. This exercises both send queues and EOF ordering end to end.
+#[test]
+fn raw_tcp_half_close_preserves_trailing_backend_response() {
+    let backend = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let payload: Vec<_> = (0..600_000).map(|i| (i % 251) as u8).collect();
+    let expected = payload.clone();
+    let backend_port = backend.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let (mut socket, _) = backend.accept().unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        socket
+            .set_write_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut request = Vec::new();
+        socket.read_to_end(&mut request).unwrap();
+        assert_eq!(request, b"\x00raw request");
+        socket.write_all(&payload).unwrap();
+        socket.shutdown(std::net::Shutdown::Write).unwrap();
+    });
+    let (port, stop, driver) = start_runtime(Config {
+        backend_port,
+        ..test_config()
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    client.write_all(b"\x00raw request").unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut received = Vec::new();
+    client.read_to_end(&mut received).unwrap();
+    assert_eq!(received, expected);
+    server.join().unwrap();
+    stop.store(true, Ordering::SeqCst);
+    driver.join().unwrap();
+}

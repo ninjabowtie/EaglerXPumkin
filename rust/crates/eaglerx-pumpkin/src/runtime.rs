@@ -23,42 +23,34 @@ fn connection_timed_out(cfg: &Config, age: Duration, idle: Duration, handshaking
 
 #[derive(Default)]
 struct Queue {
-    bytes: Vec<u8>,
-    offset: usize,
+    bytes: VecDeque<u8>,
 }
 impl Queue {
     fn len(&self) -> usize {
-        self.bytes.len() - self.offset
+        self.bytes.len()
     }
     fn push(&mut self, bytes: &[u8]) -> io::Result<()> {
         if self.len() + bytes.len() > MAX_QUEUE {
             return Err(io::Error::other("send queue limit exceeded"));
         }
-        if self.offset > 0 {
-            self.bytes.drain(..self.offset);
-            self.offset = 0;
-        }
-        self.bytes.extend_from_slice(bytes);
+        self.bytes.extend(bytes);
         Ok(())
     }
     fn flush(&mut self, socket: &mut impl Write) -> io::Result<bool> {
         let mut sent = 0;
         while self.len() > 0 && sent < IO_BUDGET {
-            let end = self.bytes.len().min(self.offset + IO_BUDGET - sent);
-            match socket.write(&self.bytes[self.offset..end]) {
+            let contiguous = self.bytes.as_slices().0;
+            let end = contiguous.len().min(IO_BUDGET - sent);
+            match socket.write(&contiguous[..end]) {
                 Ok(0) => return Err(ErrorKind::WriteZero.into()),
                 Ok(n) => {
-                    self.offset += n;
+                    self.bytes.drain(..n);
                     sent += n;
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => break,
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e),
             }
-        }
-        if self.len() == 0 {
-            self.bytes.clear();
-            self.offset = 0;
         }
         Ok(sent > 0)
     }
@@ -139,7 +131,7 @@ impl Stats {
     }
 }
 
-/// Per-source-address accept limit over a fixed window. Rejected attempts are
+/// Per-source-address accept limit over a rolling window. Rejected attempts are
 /// counted by [`Stats`], not here, and the map is pruned opportunistically.
 struct RateLimit {
     limit: u32,
@@ -365,6 +357,9 @@ impl Connection {
                     }
                 }
             }
+            if self.closing.is_some() {
+                break;
+            }
         }
         Ok(())
     }
@@ -507,13 +502,17 @@ impl Connection {
         }
         if self.mode == Mode::Raw {
             if let Some(backend) = &mut self.backend {
-                self.backend_out.flush(backend)?;
+                if self.backend_out.flush(backend)? {
+                    self.active = Instant::now();
+                }
                 if self.client_eof && self.backend_out.len() == 0 && !self.backend_write_closed {
                     backend.shutdown(Shutdown::Write)?;
                     self.backend_write_closed = true;
                 }
             }
-            self.client_out.flush(&mut self.client)?;
+            if self.client_out.flush(&mut self.client)? {
+                self.active = Instant::now();
+            }
             if self.backend_eof && self.client_out.len() == 0 && !self.client_write_closed {
                 self.client.shutdown(Shutdown::Write)?;
                 self.client_write_closed = true;
@@ -530,9 +529,13 @@ impl Connection {
             self.session.motd_tick(cfg, online, Instant::now());
             self.drain_session(cfg)?;
         }
-        self.client_out.flush(&mut self.client)?;
-        if let Some(backend) = &mut self.backend {
-            self.backend_out.flush(backend)?;
+        if self.client_out.flush(&mut self.client)? {
+            self.active = Instant::now();
+        }
+        if let Some(backend) = &mut self.backend
+            && self.backend_out.flush(backend)?
+        {
+            self.active = Instant::now();
         }
         let handshaking = self.mode != Mode::Raw
             && !(self.session.is_playing() || self.tunnel && self.backend.is_some())
@@ -798,6 +801,84 @@ mod tests {
     }
 
     #[test]
+    fn output_queue_preserves_wrapped_bytes_and_poll_budget() {
+        let mut queue = Queue {
+            bytes: VecDeque::with_capacity(8),
+        };
+        queue.push(b"abcdef").unwrap();
+        queue.bytes.drain(..4);
+        queue.push(b"ghijkl").unwrap();
+        let mut output = Vec::new();
+        queue.flush(&mut output).unwrap();
+        assert_eq!(output, b"efghijkl");
+        assert_eq!(queue.len(), 0);
+        let bytes = vec![42; IO_BUDGET + 17];
+        queue.push(&bytes).unwrap();
+        let mut output = Vec::new();
+        queue.flush(&mut output).unwrap();
+        assert_eq!(output.len(), IO_BUDGET);
+        assert_eq!(queue.len(), 17);
+        queue.flush(&mut output).unwrap();
+        assert_eq!(output, bytes);
+    }
+
+    #[test]
+    fn tunnel_close_stops_processing_pipelined_data() {
+        let cfg = Config::default();
+        let (mut connection, _peer) = notification_connection(&cfg, "Test", false);
+        connection.tunnel = true;
+        let masked = |opcode, payload: &[u8]| {
+            let mut frame = vec![0x80 | opcode, 0x80 | payload.len() as u8];
+            frame.extend_from_slice(&[0; 4]);
+            frame.extend_from_slice(payload);
+            frame
+        };
+        let mut frames = masked(OP_TEXT, br#"{"type":"close"}"#);
+        frames.extend(masked(OP_BIN, b"must not be forwarded"));
+        connection
+            .client_bytes(&frames, &cfg, 0, &mut SkinStore::default())
+            .unwrap();
+        assert!(connection.closing.is_some());
+        assert_eq!(connection.backend_out.len(), 0);
+    }
+
+    #[test]
+    fn motd_writes_refresh_idle_timer_even_at_the_end_of_a_poll() {
+        let cfg = Config {
+            idle_timeout_secs: 1,
+            motd_frames: vec!["Frame".into()],
+            motd_interval_ms: 1000,
+            motd_close_after_ms: 10000,
+            ..Default::default()
+        };
+        let (mut connection, mut peer) = notification_connection(&cfg, "Test", false);
+        connection.session = Session::default();
+        let mut skins = SkinStore::default();
+        connection
+            .session
+            .client_message(
+                ws::Message {
+                    opcode: OP_TEXT,
+                    payload: b"Accept: MOTD".to_vec(),
+                },
+                &cfg,
+                0,
+                &mut skins,
+            )
+            .unwrap();
+        connection.active = Instant::now() - Duration::from_secs(2);
+        assert!(
+            connection
+                .step(&cfg, 0, &mut Stats::new(Duration::ZERO), &mut skins)
+                .unwrap()
+        );
+        let mut header = [0; 2];
+        peer.read_exact(&mut header).unwrap();
+        assert_eq!(header[0], 0x81);
+        assert!(connection.active.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
     fn dynamic_notifications_target_negotiated_clients_and_respect_queue_bounds() {
         use std::io::Read;
         let cfg = Config {
@@ -817,7 +898,12 @@ mod tests {
         assert_eq!(runtime.notify("Alice", &request).unwrap(), 1);
         assert_eq!(runtime.connections[1].client_out.len(), 0);
         assert_eq!(runtime.connections[2].client_out.len(), 0);
-        let expected = runtime.connections[0].client_out.bytes.clone();
+        let expected: Vec<_> = runtime.connections[0]
+            .client_out
+            .bytes
+            .iter()
+            .copied()
+            .collect();
         runtime.poll();
         let mut received = vec![0; expected.len()];
         alice_peer.read_exact(&mut received).unwrap();
@@ -835,8 +921,7 @@ mod tests {
         assert_eq!(runtime.notify("Nobody", &request).unwrap(), 0);
         assert!(runtime.notify("@a", &request).is_err());
         assert_eq!(runtime.notify("*", &request).unwrap(), 2);
-        runtime.connections[0].client_out.bytes = vec![0; MAX_QUEUE];
-        runtime.connections[0].client_out.offset = 0;
+        runtime.connections[0].client_out.bytes = vec![0; MAX_QUEUE].into();
         assert_eq!(runtime.notify("*", &request).unwrap(), 1);
         runtime.connections[1].closing = Some(Instant::now());
         assert_eq!(runtime.notify("*", &request).unwrap(), 0);

@@ -1,0 +1,158 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/tmp/eagler-sweep-baseline/rust/target/aarch64-unknown-linux-gnu/debug/build/eagler-ws/4166abe23e3057ca/out/eagler_ws-4166abe23e3057ca)
+
+running 12 tests
+test tests::coalesced_batch_benchmark ... ignored, manual coalesced-buffer performance measurement
+test tests::b64_rfc4648 ... ok
+test tests::blocking_handshake_retries_interrupted_reads ... FAILED
+test tests::fragmented_messages_survive_partial_reads_and_interleaved_ping ... ok
+test tests::frame_roundtrip ... ok
+test tests::incremental_decoder_retains_fragments_between_polls ... ok
+test tests::rejects_invalid_client_frames ... ok
+test tests::sha1_rfc_vectors ... ok
+test tests::upgrade_matches_rfc_example_and_rejects_missing_headers ... ok
+test tests::coalesced_frames_and_partial_tails_survive_compaction ... ok
+test tests::extended_lengths_and_large_binary_messages ... ok
+test tests::frame_codec_micro_benchmark ... ok
+
+failures:
+
+---- tests::blocking_handshake_retries_interrupted_reads stdout ----
+
+thread 'tests::blocking_handshake_retries_interrupted_reads' (1635491) panicked at crates/eagler-ws/src/lib.rs:539:32:
+called `Result::unwrap()` on an `Err` value: Io(Kind(Interrupted))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::blocking_handshake_retries_interrupted_reads
+
+test result: FAILED. 10 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+error: test failed, to rerun pass `-p eagler-ws --lib`
+     Running unittests src/lib.rs (/tmp/eagler-sweep-baseline/rust/target/aarch64-unknown-linux-gnu/debug/build/eaglerx-pumpkin/fff1286ae2858fe9/out/eaglerx_pumpkin-fff1286ae2858fe9)
+
+running 62 tests
+test config::tests::zero_rate_limit_and_report_interval_disable_them ... ok
+test ip_filter::tests::invalid_rules_are_rejected ... ok
+test config::tests::rejects_invalid_ip_filter_entries ... ok
+test config::tests::rejects_out_of_range_diagnostics_settings ... ok
+test config::tests::motd_animation_config_ranges_are_validated ... ok
+test config::tests::connection_timeout_config_defaults_and_bounds ... ok
+test config::tests::partial_config_keeps_new_defaults ... ok
+test config::tests::rejects_unusable_backend_protocol_and_unbounded_static_motd ... FAILED
+test minecraft::tests::coalesced_batch_benchmark ... ignored, manual coalesced-buffer performance measurement
+test config::tests::pause_menu_and_notification_config_is_optional_and_validated ... ok
+test ip_filter::tests::empty_allow_list_permits_everything_but_blocks_still_apply ... ok
+test ip_filter::tests::zero_prefix_and_ipv4_mapped_addresses ... ok
+test minecraft::tests::compression_threshold_zero_requires_compressed_packets ... FAILED
+test ip_filter::tests::parses_cidr_and_exact_rules ... ok
+test minecraft::tests::rejects_hostile_lengths_and_compression ... ok
+test config::tests::minecraft_protocol_range_is_validated_and_defaults_to_exact ... ok
+test minecraft::tests::decodes_tcp_splits_and_compression_transition ... ok
+test notifications::tests::hide_packet_matches_show_id_and_rejects_invalid_requests ... ok
+test notifications::tests::validates_json_and_escaped_component_lengths ... ok
+test notifications::tests::priorities_and_silent_flags_follow_reference_layout ... ok
+test runtime::tests::connection_deadlines_distinguish_handshake_age_and_inactivity ... ok
+test runtime::tests::dynamic_notifications_target_negotiated_clients_and_respect_queue_bounds ... ok
+test runtime::tests::rate_limit_counts_per_address_and_refills_after_the_window ... ok
+test minecraft::tests::rejects_truncated_zlib_and_empty_compressed_packets ... FAILED
+test runtime::tests::motd_writes_refresh_idle_timer_even_at_the_end_of_a_poll ... FAILED
+test runtime::tests::send_queue_preserves_partial_writes_and_appended_bytes ... ok
+test motd_icon::tests::rejects_animated_png ... ok
+test config::tests::motd_icon_defaults_to_the_builtin_server_icon_and_can_be_overridden ... ok
+test runtime::tests::zero_rate_limit_disables_tracking ... ok
+test session::tests::backend_login_waits_for_client_finish_before_replaying_configuration ... ok
+test runtime::tests::tunnel_close_stops_processing_pipelined_data ... FAILED
+test session::tests::dynamic_notification_capabilities_and_recipient_gates ... ok
+test session::tests::animated_motd_cycles_frames_then_closes_after_max_age ... ok
+test session::tests::advertises_and_sends_configured_pause_menu_and_notification ... ok
+test session::tests::login_start_matches_each_protocol_generation ... ok
+test session::tests::initial_identity_is_used_when_nickname_selection_is_disabled ... ok
+test session::tests::login_start_uses_the_selected_protocol_from_the_range ... ok
+test session::tests::malformed_requests_and_backend_failures_reject_cleanly ... ok
+test session::tests::mismatch_packet_advertises_the_configured_protocol_range ... ok
+test session::tests::motd_max_age_is_independent_of_next_frame_deadline ... FAILED
+test session::tests::protocol_outside_the_configured_range_receives_the_range_mismatch ... ok
+test session::tests::negotiates_the_highest_offered_protocol_inside_the_range ... ok
+test session::tests::registers_profile_textures_and_answers_injected_requests ... ok
+test session::tests::static_motd_query_answers_and_closes ... ok
+test session::tests::version_mismatch_and_duplicate_profiles_are_rejected ... ok
+test skins::tests::converts_v3_pixels_to_eagler_texture ... ok
+test skins::tests::encodes_skin_cape_and_combined_textures ... ok
+test skins::tests::malformed_profile_data_keeps_the_previous_texture ... ok
+test skins::tests::parses_preset_and_custom_profile_data ... ok
+test minecraft::tests::encoded_wire_size_is_bounded_and_trailing_compressed_data_is_rejected ... FAILED
+test motd_icon::tests::expands_palette_transparency_and_strips_sixteen_bit_channels ... ok
+test ui::tests::pause_menu_uses_external_link_mode ... ok
+test ui::tests::notification_has_text_components_and_default_colors ... ok
+test notifications::tests::stable_ids_replace_badges_and_text_is_literal ... ok
+test session::tests::static_motd_query_uses_configured_server_icon ... ok
+test motd_icon::tests::converts_png_channels_to_wire_rgba ... ok
+test runtime::tests::tracked_address_map_stays_bounded ... ok
+test motd_icon::tests::rejects_bad_images_before_serving_queries ... ok
+test session::tests::full_login_and_compression_flow_matches_each_protocol_generation ... ok
+test session::tests::long_disconnect_reasons_remain_valid_utf8_and_json ... FAILED
+test minecraft::tests::compression_roundtrip_large_packet ... ok
+test minecraft::tests::coalesced_packets_and_partial_tails_survive_compaction ... ok
+
+failures:
+
+---- config::tests::rejects_unusable_backend_protocol_and_unbounded_static_motd stdout ----
+
+thread 'config::tests::rejects_unusable_backend_protocol_and_unbounded_static_motd' (1635510) panicked at crates/eaglerx-pumpkin/src/config.rs:307:13:
+assertion failed: cfg.validate().is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- minecraft::tests::compression_threshold_zero_requires_compressed_packets stdout ----
+
+thread 'minecraft::tests::compression_threshold_zero_requires_compressed_packets' (1635518) panicked at crates/eaglerx-pumpkin/src/minecraft.rs:254:9:
+assertion failed: decoder.next_packet().is_err()
+
+---- minecraft::tests::rejects_truncated_zlib_and_empty_compressed_packets stdout ----
+
+thread 'minecraft::tests::rejects_truncated_zlib_and_empty_compressed_packets' (1635522) panicked at crates/eaglerx-pumpkin/src/minecraft.rs:244:9:
+accepted empty packet body
+
+---- runtime::tests::motd_writes_refresh_idle_timer_even_at_the_end_of_a_poll stdout ----
+
+thread 'runtime::tests::motd_writes_refresh_idle_timer_even_at_the_end_of_a_poll' (1635533) panicked at crates/eaglerx-pumpkin/src/runtime.rs:845:9:
+assertion failed: connection.step(&cfg, 0, &mut Stats::new(Duration::ZERO), &mut skins).unwrap()
+
+---- runtime::tests::tunnel_close_stops_processing_pipelined_data stdout ----
+
+thread 'runtime::tests::tunnel_close_stops_processing_pipelined_data' (1635537) panicked at crates/eaglerx-pumpkin/src/runtime.rs:815:14:
+called `Result::unwrap()` on an `Err` value: Custom { kind: Other, error: "tunnel is not connected" }
+
+---- session::tests::motd_max_age_is_independent_of_next_frame_deadline stdout ----
+
+thread 'session::tests::motd_max_age_is_independent_of_next_frame_deadline' (1635550) panicked at crates/eaglerx-pumpkin/src/session.rs:775:9:
+max age must not wait for next animation frame
+
+---- minecraft::tests::encoded_wire_size_is_bounded_and_trailing_compressed_data_is_rejected stdout ----
+
+thread 'minecraft::tests::encoded_wire_size_is_bounded_and_trailing_compressed_data_is_rejected' (1635520) panicked at crates/eaglerx-pumpkin/src/minecraft.rs:200:9:
+assertion failed: codec.encode(&vec![42; MAX_PACKET]).is_err()
+
+---- session::tests::long_disconnect_reasons_remain_valid_utf8_and_json stdout ----
+
+thread 'session::tests::long_disconnect_reasons_remain_valid_utf8_and_json' (1635547) panicked at crates/eaglerx-pumpkin/src/session.rs:745:85:
+called `Result::unwrap()` on an `Err` value: Error("EOF while parsing a string", line: 1, column: 65535)
+
+
+failures:
+    config::tests::rejects_unusable_backend_protocol_and_unbounded_static_motd
+    minecraft::tests::compression_threshold_zero_requires_compressed_packets
+    minecraft::tests::encoded_wire_size_is_bounded_and_trailing_compressed_data_is_rejected
+    minecraft::tests::rejects_truncated_zlib_and_empty_compressed_packets
+    runtime::tests::motd_writes_refresh_idle_timer_even_at_the_end_of_a_poll
+    runtime::tests::tunnel_close_stops_processing_pipelined_data
+    session::tests::long_disconnect_reasons_remain_valid_utf8_and_json
+    session::tests::motd_max_age_is_independent_of_next_frame_deadline
+
+test result: FAILED. 53 passed; 8 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p eaglerx-pumpkin --lib`
+error: 2 targets failed:
+    `-p eagler-ws --lib`
+    `-p eaglerx-pumpkin --lib`

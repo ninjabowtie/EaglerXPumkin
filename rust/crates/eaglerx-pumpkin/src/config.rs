@@ -117,6 +117,18 @@ impl Config {
             }
         }
 
+        if self.backend_port == 0 {
+            return Err("backend_port must be nonzero".into());
+        }
+        if self.min_minecraft_protocol.is_none()
+            && self.max_minecraft_protocol.is_none()
+            && self.minecraft_protocol < 755
+        {
+            return Err("minecraft_protocol must be at least 755 (Minecraft 1.17)".into());
+        }
+        if self.motd.len() > 2048 {
+            return Err("motd must be at most 2048 bytes".into());
+        }
         if !self.backend_address.is_loopback() {
             return Err("backend_address must be a loopback IP address".into());
         }
@@ -283,6 +295,46 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_unusable_backend_protocol_and_unbounded_static_motd() {
+        for cfg in [
+            Config {
+                backend_port: 0,
+                ..Default::default()
+            },
+            Config {
+                minecraft_protocol: 0,
+                ..Default::default()
+            },
+            Config {
+                minecraft_protocol: 754,
+                ..Default::default()
+            },
+            Config {
+                motd: "a".repeat(2049),
+                ..Default::default()
+            },
+        ] {
+            assert!(cfg.validate().is_err());
+        }
+        Config {
+            motd: "a".repeat(2048),
+            minecraft_protocol: 755,
+            ..Default::default()
+        }
+        .validate()
+        .unwrap();
+        // An unused exact field does not override a valid explicitly set range.
+        Config {
+            minecraft_protocol: 0,
+            min_minecraft_protocol: Some(755),
+            max_minecraft_protocol: Some(777),
+            ..Default::default()
+        }
+        .validate()
+        .unwrap();
+    }
 
     #[test]
     fn connection_timeout_config_defaults_and_bounds() {

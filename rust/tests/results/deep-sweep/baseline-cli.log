@@ -1,0 +1,22 @@
+   Compiling eaglerx-pumpkin v0.1.0 (/tmp/eagler-sweep-baseline/rust/crates/eaglerx-pumpkin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.00s
+     Running tests/native_cli.rs (/tmp/eagler-sweep-baseline/rust/target/aarch64-unknown-linux-gnu/debug/build/eaglerx-pumpkin/cb94a92ba093eb2f/out/native_cli-cb94a92ba093eb2f)
+
+running 1 test
+test native_cli_emits_periodic_diagnostics_by_default ... FAILED
+
+failures:
+
+---- native_cli_emits_periodic_diagnostics_by_default stdout ----
+
+thread 'native_cli_emits_periodic_diagnostics_by_default' (1637129) panicked at crates/eaglerx-pumpkin/tests/native_cli.rs:71:5:
+native diagnostics missing: EaglerXPumpkin listening on 127.0.0.1:37809 (config: /tmp/eagler-cli-1637128-1795058742525371206/eagler.toml)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    native_cli_emits_periodic_diagnostics_by_default
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.00s
+
+error: test failed, to rerun pass `-p eaglerx-pumpkin --test native_cli`

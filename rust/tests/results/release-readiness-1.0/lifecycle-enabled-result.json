@@ -1,0 +1,7 @@
+{
+  "passed": false,
+  "artifact_sha256": "0eb0ed902d7f4895ffeacf1a304f78eb0b47950c5d9988077ba26b989e1866e3",
+  "gateway_port": 50707,
+  "scope": "isolated WASI host, console commands and simulated notification-capable Eagler client",
+  "error": "[Errno 111] Connection refused"
+}

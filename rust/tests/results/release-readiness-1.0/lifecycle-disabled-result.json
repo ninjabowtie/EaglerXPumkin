@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "artifact_sha256": "0eb0ed902d7f4895ffeacf1a304f78eb0b47950c5d9988077ba26b989e1866e3",
+  "gateway_port": 60609,
+  "scope": "isolated WASI host, console commands and simulated notification-capable Eagler client",
+  "lifecycle_passed": true,
+  "lifecycle_cycles": 3,
+  "checks": [
+    "three active-session unload/reload cycles with dynamic notifications disabled"
+  ]
+}

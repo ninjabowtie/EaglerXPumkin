@@ -1,0 +1,59 @@
+pumpkin.toml changed because values were missing. The missing values were filled with default values.
+[2m19:30:56[0m [32m INFO[0m Starting Pumpkin 0.2.2+26.3-26.60 Java Minecraft (Protocol 777) | 1.26.60 Bedrock (Protocol 2225)
+[2m19:30:56[0m [33m WARN[0m Pumpkin is currently under heavy development!
+[2m19:30:56[0m [32m INFO[0m Report issues on https://github.com/Pumpkin-MC/Pumpkin/issues
+[2m19:30:56[0m [32m INFO[0m Join our Discord for community support: https://discord.gg/wT8XjrjKkf
+[2m19:30:56[0m [32m INFO[0m Consider Donating to https://pumpkinmc.org/donate/
+[2m19:30:56[0m [33m WARN[0m No level.dat in world, creating a new world with seed 1796766181811282553
+[2m19:30:56[0m [32m INFO[0m Enabled dimensions: ["minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"]
+[2m19:30:56[0m [32m INFO[0m Loading minecraft:overworld
+[2m19:30:56[0m [32m INFO[0m Loading minecraft:the_nether
+[2m19:30:56[0m [32m INFO[0m Loading minecraft:the_end
+[2m19:30:56[0m [32m INFO[0m All worlds loaded successfully.
+[2m19:30:56[0m [32m INFO[0m Loaded 198 embedded test instance(s)
+[2m19:30:56[0m [32m INFO[0m Loaded 26 int and 4 float embedded context provider(s)
+[2m19:30:56[0m [33m WARN[0m Plugin './plugins/EaglerXPumpkin.wasm' is unsigned. Unsigned plugins may come from untrusted sources.
+[2m19:30:57[0m [32m INFO[0m Found cached permission decision for plugin "eaglerx-pumpkin" (approved: true)
+[2m19:30:57[0m [32m INFO[0m Eagler listener on 127.0.0.1:55725 -> 127.0.0.1:35787 (MC protocols 777-777, unlimited connections/minute per address) [3mplugin.target[0m[2m=[0meaglerx_pumpkin::runtime [3mplugin.module[0m[2m=[0meaglerx_pumpkin::runtime [3mplugin.file[0m[2m=[0mcrates/eaglerx-pumpkin/src/runtime.rs [3mplugin.line[0m[2m=[0m579
+[2m19:30:57[0m [32m INFO[0m EaglerXPumpkin loaded; scheduler listener active [3mplugin.target[0m[2m=[0meaglerx_pumpkin::plugin [3mplugin.module[0m[2m=[0meaglerx_pumpkin::plugin [3mplugin.file[0m[2m=[0mcrates/eaglerx-pumpkin/src/lib.rs [3mplugin.line[0m[2m=[0m90
+[2m19:30:57[0m [32m INFO[0m Loaded eaglerx-pumpkin (0.1.0)
+[2m19:30:57[0m [33m WARN[0m Plugin "eaglerx-pumpkin" uses the following permissions: ["network.tcp.bind", "network.tcp.connect", "fs.read.data", "fs.write.data"]
+[2m19:30:57[0m [32m INFO[0m Started server; took 737ms
+[2m19:30:57[0m [32m INFO[0m Server is now running. Connect using port: Java Edition: 127.0.0.1:35787
+[2m19:30:57[0m [32m INFO[0m Anonymous server telemetry is enabled. Sending periodic heartbeats to https://market.pumpkinmc.org/api/v1/rest/telemetry/heartbeat
+Badge action queued for 1 Eagler connection(s)
+Badge action queued for 1 Eagler connection(s)
+Badge action queued for 1 Eagler connection(s)
+[2m19:30:57[0m [32m INFO[0m BadgeProbe joined the game
+[2m19:30:57[0m [32m INFO[0m Player (BadgeProbe): executed command /eaglernotify * {"title":"Unauthorized"}
+[2m19:30:59[0m [32m INFO[0m Player (BadgeProbe): executed command /eaglernotifyhide * {"id":"test"}
+Stopping the server
+[2m19:31:01[0m [32m INFO[0m Stopped accepting incoming connections
+[2m19:31:01[0m [33m WARN[0m Closing connection for 0: Server stopped
+[2m19:31:01[0m [32m INFO[0m Ending player tasks
+[2m19:31:01[0m [32m INFO[0m BadgeProbe left the game
+[2m19:31:01[0m [32m INFO[0m All plugins unloaded successfully
+[2m19:31:01[0m [32m INFO[0m Starting save.
+[2m19:31:01[0m [32m INFO[0m Starting worlds
+[2m19:31:01[0m [32m INFO[0m Saved 3 POI region(s)
+[2m19:31:01[0m [32m INFO[0m Saving level (world)...
+[2m19:31:01[0m [32m INFO[0m Joining 1 threads for world...
+[2m19:31:01[0m [32m INFO[0m Saving chunks before shutdown...
+[2m19:31:01[0m [32m INFO[0m schedule: waiting for 0 generation tasks to finish
+[2m19:31:01[0m [32m INFO[0m Flushing chunk data to disk for world...
+[2m19:31:01[0m [32m INFO[0m Flushing entity data to disk for world...
+[2m19:31:01[0m [32m INFO[0m Saving level (world)...
+[2m19:31:01[0m [32m INFO[0m Joining 1 threads for world...
+[2m19:31:01[0m [32m INFO[0m Saving chunks before shutdown...
+[2m19:31:01[0m [32m INFO[0m schedule: waiting for 0 generation tasks to finish
+[2m19:31:01[0m [32m INFO[0m Flushing chunk data to disk for world...
+[2m19:31:01[0m [32m INFO[0m Flushing entity data to disk for world...
+[2m19:31:01[0m [32m INFO[0m Saving level (world)...
+[2m19:31:01[0m [32m INFO[0m Joining 1 threads for world...
+[2m19:31:01[0m [32m INFO[0m Saving chunks before shutdown...
+[2m19:31:01[0m [32m INFO[0m schedule: waiting for 0 generation tasks to finish
+[2m19:31:01[0m [32m INFO[0m Flushing chunk data to disk for world...
+[2m19:31:01[0m [32m INFO[0m Flushing entity data to disk for world...
+[2m19:31:01[0m [32m INFO[0m Completed worlds
+[2m19:31:01[0m [32m INFO[0m Completed save!
+[2m19:31:01[0m [32m INFO[0m The server has stopped.

@@ -1,0 +1,15 @@
+{
+  "stamped_version": "1.0.0",
+  "staging": "/tmp/eagler-1.0-release-staging",
+  "package_local_links_missing": [
+    "../docs/PUMPKIN_PORT_PLAN.md#planned-eaglercraft-117-client-support",
+    "tests/results/eagler-client-investigation/README.md",
+    "../tests/compatibility/README.md",
+    "../docs/TESTING.md",
+    "crates/eaglerx-pumpkin/tests/gateway.rs",
+    "tests/results/deep-sweep/README.md",
+    "../docs/TESTING.md"
+  ],
+  "distinct_missing_local_targets": 6,
+  "missing_local_link_occurrences": 7
+}

@@ -1,0 +1,18 @@
+{
+  "assessed_commit": "7ab70a892452c0d618cc16fef809caf6af0c6cfa",
+  "assessed_branch": "dev",
+  "recorded_utc": "2026-11-19T03:38:26.619380+00:00",
+  "remote_main": "c2d902241f231c5c2915a85441eba2aae046c58b",
+  "remote_dev": "7ab70a892452c0d618cc16fef809caf6af0c6cfa",
+  "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+  "candidate_wasm_sha256": "0eb0ed902d7f4895ffeacf1a304f78eb0b47950c5d9988077ba26b989e1866e3",
+  "stamped_1_0_0_wasm_sha256": "535290147e4fa67c566ebeca7361d14c73c669ffa7ab3c46304c15dc4b1bcc13",
+  "host_binary_sha256": "9882aa350ee8674d12870ee7c9fa6eed387101c32c34a5f3071a9040b1c29fd3",
+  "host_version": "Pumpkin 0.2.2+26.3-26.60",
+  "audit_tool": "cargo-audit 0.23.0",
+  "audit_tool_archive_sha256": "00eff3158429b9629abe8748e971f29f99ee53d4cff54a25072cbb15167bdda8",
+  "production_code_modified": false,
+  "installed_server_modified": false,
+  "release_published": false,
+  "graphical_acceptance_run": false
+}
